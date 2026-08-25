@@ -1,11 +1,10 @@
 import { motion, useInView } from "framer-motion";
-import { Trophy, Newspaper, Award, GraduationCap } from "lucide-react";
+import { Trophy, Newspaper, GraduationCap } from "lucide-react";
 import { useRef } from "react";
 
 const prizes = [
   { icon: Trophy, title: "National Trophy & Certificate", desc: "Official recognition from NIAT", color: "text-amber-400", bg: "bg-amber-400/10", value: "🏆" },
   { icon: Newspaper, title: "Media Coverage", desc: "Featured in national education publications", color: "text-blue-400", bg: "bg-blue-400/10", value: "📰" },
-  { icon: Award, title: "₹50,000 Cash Prize", desc: "Monetary award for personal development", color: "text-emerald-400", bg: "bg-emerald-400/10", value: "💰" },
   { icon: GraduationCap, title: "Professional Development", desc: "Exclusive workshops and networking", color: "text-purple-400", bg: "bg-purple-400/10", value: "🎓" },
 ];
 
@@ -25,7 +24,7 @@ const WinnersReceiveSection = () => {
           <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl font-bold text-white">What Winners Receive</h2>
         </motion.div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
           {prizes.map((p, i) => (
             <motion.div key={p.title}
               initial={{ opacity: 0, scale: 0.8, y: 30 }}
