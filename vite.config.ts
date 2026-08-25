@@ -7,6 +7,13 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     hmr: { overlay: false },
+    proxy: {
+      "/api": {
+        target: "https://niatawards-backend.vercel.app",
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
   plugins: [react()],
   resolve: {

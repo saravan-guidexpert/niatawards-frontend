@@ -1,4 +1,8 @@
-const API_URL = (import.meta.env.VITE_API_URL ?? "https://niatawards-backend.vercel.app").replace(/\/$/, "");
+const rawApiUrl = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+const API_URL =
+  rawApiUrl && !rawApiUrl.includes("localhost")
+    ? rawApiUrl
+    : "https://niatawards-backend.vercel.app";
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET ?? "niat_admin_2026_secret";
 
 export class ApiError extends Error {
@@ -18,12 +22,21 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...(options.headers ?? {}),
     },
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new ApiError(data.error || "Request failed", data.code);
+  const contentType = res.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
+    ? await res.json().catch(() => ({}))
+    : {};
+  if (!contentType.includes("application/json") || !res.ok) {
+    throw new ApiError(
+      (data && typeof data === "object" && "error" in data && String(data.error)) ||
+        (res.ok ? "Could not reach the server. Please try again." : `Request failed (${res.status})`),
+      data && typeof data === "object" && "code" in data ? String(data.code) : undefined
+    );
   }
   return data as T;
 }
+
+const asArray = <T,>(data: unknown): T[] => (Array.isArray(data) ? data : []);
 
 const adminHeaders = () => ({ "x-admin-secret": ADMIN_SECRET });
 
@@ -39,15 +52,23 @@ export const apiVerifyOtp = (phone: string, otp: string) =>
     body: JSON.stringify({ phone, otp }),
   });
 
-export const createNomination = (payload: Record<string, unknown>) =>
-  request("/api/nominations", { method: "POST", body: JSON.stringify(payload) });
+export const createNomination = async (payload: Record<string, unknown>) => {
+  const data = await request<Record<string, unknown>>("/api/nominations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!data?.id) {
+    throw new ApiError("Nomination was not saved. Please try again.");
+  }
+  return data;
+};
 
-export const getNominations = (status = "shortlisted,winner") =>
-  request<any[]>(`/api/nominations?status=${encodeURIComponent(status)}`);
+export const getNominations = async (status = "shortlisted,winner") =>
+  asArray(await request(`/api/nominations?status=${encodeURIComponent(status)}`));
 
-export const getVotes = (voterPhone?: string) => {
+export const getVotes = async (voterPhone?: string) => {
   const q = voterPhone ? `?voter_phone=${encodeURIComponent(voterPhone)}` : "";
-  return request<any[]>(`/api/votes${q}`);
+  return asArray(await request(`/api/votes${q}`));
 };
 
 export const createVote = (nomination_id: string, voter_phone: string) =>
@@ -56,11 +77,11 @@ export const createVote = (nomination_id: string, voter_phone: string) =>
     body: JSON.stringify({ nomination_id, voter_phone }),
   });
 
-export const adminGetNominations = () =>
-  request<any[]>("/api/admin/nominations", { headers: adminHeaders() });
+export const adminGetNominations = async () =>
+  asArray(await request("/api/admin/nominations", { headers: adminHeaders() }));
 
-export const adminGetVotes = () =>
-  request<any[]>("/api/admin/votes", { headers: adminHeaders() });
+export const adminGetVotes = async () =>
+  asArray(await request("/api/admin/votes", { headers: adminHeaders() }));
 
 export const adminUpdateNomination = (id: string, payload: Record<string, unknown>) =>
   request(`/api/admin/nominations/${encodeURIComponent(id)}`, {

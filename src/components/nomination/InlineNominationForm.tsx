@@ -70,7 +70,7 @@ const FormTextarea = ({
       onChange={(e) => onChange(e.target.value)}
       rows={rows}
       placeholder={placeholder}
-      required={required}
+      required={false}
       className="w-full rounded-lg px-3 py-2 text-[13px] font-medium text-white placeholder:text-white/35 focus:outline-none transition-all resize-none"
       style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }}
     />
@@ -182,7 +182,12 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
       track("nomination_submitted", { role });
       navigate("/thank-you");
     } catch (err: any) {
-      toast({ title: err.message || "Submission failed. Please try again.", variant: "destructive" });
+      console.error("Nomination submit failed:", err);
+      toast({
+        title: "Submission failed",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -230,7 +235,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
         {/* ── STEP 1 ── */}
         {formStep === 1 && (
           <motion.form key="step1" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
-            onSubmit={handleStep1Next} className="space-y-2">
+            onSubmit={handleStep1Next} noValidate className="space-y-2">
 
             {/* Role dropdown */}
             <div className="relative" ref={roleDropdownRef}>
@@ -299,7 +304,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
         {/* ── STEP 2 ── */}
         {formStep === 2 && (
           <motion.form key="step2" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
-            onSubmit={handleSubmit} className="space-y-2">
+            onSubmit={handleSubmit} noValidate className="space-y-2">
 
             {role === "student" && (
               <div className="space-y-2">

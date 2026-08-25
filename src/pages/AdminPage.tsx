@@ -460,11 +460,11 @@ const AdminPage = () => {
     setLoading(true);
     try {
       const noms = await adminGetNominations();
-      setNominations(noms || []);
+      setNominations(noms);
 
       const voteData = await adminGetVotes();
       const nomMap: Record<string, any> = {};
-      (noms || []).forEach(n => { nomMap[n.id] = n; });
+      noms.forEach(n => { nomMap[n.id] = n; });
       setVotes(voteData.map(v => ({
         ...v,
         nominations: nomMap[v.nomination_id] || null,
