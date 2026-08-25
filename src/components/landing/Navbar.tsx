@@ -4,8 +4,8 @@ import { Menu, X, LogIn, LogOut } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 
-const MAROON = "#6B1212";
-const MAROON_DARK = "#550F0F";
+const NAV_BG = "#000000";
+const NAV_BG_MENU = "#0a0a0a";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -39,15 +39,20 @@ const Navbar = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50">
-      <nav style={{ backgroundColor: MAROON }} className="border-b border-black/20 shadow-lg shadow-black/30">
+      <nav style={{ backgroundColor: NAV_BG }} className="border-b border-white/10 shadow-lg shadow-black/30">
         <div className="flex items-center justify-between px-4 sm:px-6" style={{ height: "56px" }}>
 
-          {/* Logo */}
-          <Link to="/" className="flex-shrink-0" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
-            <picture>
-              <source srcSet="/nxtwave-logo.webp" type="image/webp" />
-              <img src="/nxtwave-logo.png" alt="NxtWave Institute of Advanced Technologies" width="148" height="36" style={{ width: "148px", height: "36px", objectFit: "contain", display: "block", flexShrink: 0 }} fetchPriority="high" />
-            </picture>
+          {/* Logo — 237×56 lockup, height 32px mobile / 40px desktop */}
+          <Link to="/" className="flex-shrink-0 flex items-center no-underline">
+            <img
+              src="/niat-lockup.svg?v=2"
+              alt="NIAT - NxtWave of Innovation in Advanced Technologies"
+              width={237}
+              height={56}
+              className="h-8 w-auto sm:h-10"
+              style={{ display: "block", flexShrink: 0, objectFit: "contain" }}
+              fetchPriority="high"
+            />
           </Link>
 
           {/* Desktop nav */}
@@ -111,7 +116,7 @@ const Navbar = () => {
         <AnimatePresence>
           {open && (
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
-              className="md:hidden overflow-hidden border-t border-black/20" style={{ backgroundColor: MAROON_DARK }}>
+              className="md:hidden overflow-hidden border-t border-white/10" style={{ backgroundColor: NAV_BG_MENU }}>
               <div className="px-4 py-2 flex flex-col">
                 {links.map((l) => (
                   <a key={l.hash} href={l.hash} onClick={(e) => handleNavClick(e, l.hash)}

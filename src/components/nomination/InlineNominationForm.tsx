@@ -49,6 +49,34 @@ export const CustomSelect = ({ value, onChange, options, placeholder }: {
   );
 };
 
+const FormTextarea = ({
+  label, value, onChange, placeholder, required, rows = 3,
+}: {
+  label?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  required?: boolean;
+  rows?: number;
+}) => (
+  <div>
+    {label && (
+      <label className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">
+        {label}
+      </label>
+    )}
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      rows={rows}
+      placeholder={placeholder}
+      required={required}
+      className="w-full rounded-lg px-3 py-2 text-[13px] font-medium text-white placeholder:text-white/35 focus:outline-none transition-all resize-none"
+      style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }}
+    />
+  </div>
+);
+
 interface Props {
   userName?: string;
   userPhone?: string;
@@ -96,15 +124,6 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
     "High School (Class 9–10)", "Senior Secondary (Class 11–12)",
     "Undergraduate / College", "Postgraduate / College", "All Classes",
   ];
-
-  const TA = ({ label, value, onChange, placeholder, required, rows = 3 }: any) => (
-    <div>
-      {label && <label className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">{label}</label>}
-      <textarea value={value} onChange={e => onChange(e.target.value)} rows={rows} placeholder={placeholder} required={required}
-        className="w-full rounded-lg px-3 py-2 text-[13px] font-medium text-white placeholder:text-white/35 focus:outline-none transition-all resize-none"
-        style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }} />
-    </div>
-  );
 
   const handleStep1Next = (e: React.FormEvent) => {
     e.preventDefault();
@@ -284,8 +303,8 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
 
             {role === "student" && (
               <div className="space-y-2">
-                <TA label="What's special about this teacher?" value={sf.specialThing} onChange={(v: string) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
-                <TA label="How have they impacted you?" value={sf.impactStory} onChange={(v: string) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." required rows={3} />
+                <FormTextarea label="What's special about this teacher?" value={sf.specialThing} onChange={(v) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
+                <FormTextarea label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." required rows={3} />
                 <input style={iStyle} className={iCls} placeholder="Awards / Recognition (Optional)" value={sf.awardsRecognition} onChange={e => setSF("awardsRecognition", e.target.value)} />
                 <input style={iStyle} className={iCls} placeholder="Teacher's LinkedIn / Social Media (Optional)" value={sf.teacherSocial} onChange={e => setSF("teacherSocial", e.target.value)} />
               </div>
@@ -293,7 +312,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
 
             {role === "teacher" && (
               <div className="space-y-2">
-                <TA label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v: string) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
+                <FormTextarea label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
               </div>
             )}
 
