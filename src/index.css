@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 0 68% 30%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 36 80% 50%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 5% 95%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 0 68% 30%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 5% 90%;
+    --input: 0 5% 90%;
+    --ring: 0 68% 30%;
+    --radius: 0.625rem;
+    --gradient-hero: linear-gradient(135deg, hsl(0, 68%, 22%), hsl(0, 55%, 35%));
+    --gradient-accent: linear-gradient(135deg, hsl(0, 68%, 30%), hsl(350, 60%, 40%));
+    --gradient-warm: linear-gradient(135deg, hsl(36, 80%, 50%), hsl(28, 85%, 48%));
+    --gradient-dark: linear-gradient(135deg, hsl(0, 0%, 8%), hsl(0, 10%, 14%));
+    --shadow-card: 0 4px 24px -4px hsl(0 0% 0% / 0.06);
+    --shadow-elevated: 0 12px 40px -8px hsl(0 0% 0% / 0.12);
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 26%;
+    --sidebar-primary: 0 68% 30%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 5% 96%;
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 0 5% 91%;
+    --sidebar-ring: 0 68% 30%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'DM Sans', sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 { font-family: 'DM Sans', 'Inter', sans-serif; }
+}
+
+@layer utilities {
+  .text-gradient-hero {
+    background: var(--gradient-hero);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .bg-gradient-hero { background: var(--gradient-hero); }
+  .bg-gradient-accent { background: var(--gradient-accent); }
+  .bg-gradient-warm { background: var(--gradient-warm); }
+  .bg-gradient-dark { background: var(--gradient-dark); }
+  .shadow-card { box-shadow: var(--shadow-card); }
+  .shadow-elevated { box-shadow: var(--shadow-elevated); }
+}
+
+/* Safe area for iPhone notch and home indicator */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Better tap highlight on mobile */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* Prevent text size adjustment on rotation */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* Smooth scrolling */
+html { scroll-behavior: smooth; }
+
+/* Prevent horizontal scroll */
+body { overflow-x: hidden; }
+
+/* Better touch scrolling */
+* { -webkit-overflow-scrolling: touch; }
+
+/* Skip link */
+.skip-link { position: absolute; transform: translateY(-100%); }
+.skip-link:focus { transform: translateY(0); }
+
+/* Visible focus styles — WCAG 2.1 AA */
+:focus-visible {
+  outline: 2px solid #d97706;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #d97706;
+  outline-offset: 2px;
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border-width: 0;
+}
+.focus\:not-sr-only:focus {
+  position: fixed;
+  width: auto;
+  height: auto;
+  padding: 8px 16px;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}

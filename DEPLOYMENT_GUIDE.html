@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NIAT Awards — Deployment Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:#0f0f0f;color:#e8e8e8;line-height:1.7;padding:0 0 80px}
+  .header{background:linear-gradient(135deg,hsl(0,68%,22%),hsl(0,55%,35%));padding:56px 40px;text-align:center}
+  .header h1{font-size:36px;font-weight:700;color:white;margin-bottom:8px}
+  .header p{color:rgba(255,255,255,.7);font-size:16px}
+  .badge{display:inline-block;background:hsl(36,80%,50%);color:#1a0a00;font-size:12px;font-weight:700;padding:4px 14px;border-radius:100px;margin-bottom:16px;letter-spacing:.5px}
+  .container{max-width:820px;margin:0 auto;padding:0 24px}
+  .toc{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;padding:28px 32px;margin:40px 0 48px}
+  .toc h2{font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:#888;margin-bottom:16px}
+  .toc ol{padding-left:20px;display:flex;flex-direction:column;gap:8px}
+  .toc li a{color:#7ba7ff;text-decoration:none;font-size:15px;font-weight:500}
+  .toc li a:hover{color:white}
+  .step{margin-bottom:56px}
+  .step-num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:hsl(0,68%,30%);color:white;font-size:13px;font-weight:700;margin-bottom:12px}
+  .step h2{font-size:24px;font-weight:700;color:white;margin-bottom:8px}
+  .step .sub{color:#aaa;font-size:15px;margin-bottom:24px}
+  .card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:24px 28px;margin-bottom:16px}
+  .card h3{font-size:16px;font-weight:600;color:white;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .card p,.card li{font-size:14px;color:#bbb;line-height:1.7}
+  .card ul,.card ol{padding-left:18px;display:flex;flex-direction:column;gap:6px;margin-top:8px}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 10px;border-radius:100px;margin-right:6px;margin-bottom:4px}
+  .tag.free{background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3)}
+  .tag.db{background:rgba(26,92,255,.15);color:#7ba7ff;border:1px solid rgba(26,92,255,.3)}
+  code{font-family:'JetBrains Mono',monospace;background:#252525;padding:2px 8px;border-radius:5px;font-size:13px;color:#e8e8e8}
+  pre{font-family:'JetBrains Mono',monospace;background:#141414;border:1px solid #2a2a2a;border-radius:10px;padding:20px 24px;font-size:13px;overflow-x:auto;line-height:1.7;color:#d4d4d4;margin-top:12px;position:relative}
+  pre .copy-btn{position:absolute;top:12px;right:12px;background:#2a2a2a;border:1px solid #3a3a3a;color:#aaa;font-size:11px;padding:4px 12px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif}
+  pre .copy-btn:hover{background:#333;color:white}
+  .highlight{color:#7ba7ff}
+  .highlight2{color:hsl(36,80%,60%)}
+  .highlight3{color:#34d399}
+  .divider{border:none;border-top:1px solid #222;margin:48px 0}
+  .tip{background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.2);border-radius:10px;padding:14px 18px;font-size:14px;color:#fcd57a;margin-top:12px}
+  .tip strong{color:hsl(36,80%,65%)}
+  .success{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:10px;padding:14px 18px;font-size:14px;color:#6ee7b7;margin-top:12px}
+  .url-box{background:#141414;border:1px solid hsl(0,68%,30%);border-radius:10px;padding:18px 24px;text-align:center;margin-top:16px}
+  .url-box .url{font-family:'JetBrains Mono',monospace;font-size:18px;color:hsl(36,80%,60%);font-weight:600}
+  .url-box .desc{font-size:13px;color:#888;margin-top:4px}
+  .final{background:linear-gradient(135deg,hsl(0,68%,22%),hsl(0,55%,35%));border-radius:16px;padding:40px;text-align:center;margin-top:64px}
+  .final h2{font-size:28px;font-weight:700;color:white;margin-bottom:8px}
+  .final p{color:rgba(255,255,255,.7);font-size:15px}
+  a.btn{display:inline-block;margin-top:20px;background:hsl(36,80%,50%);color:#1a0a00;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="badge">DEPLOYMENT GUIDE</div>
+  <h1>🚀 Host NIAT Awards 2026</h1>
+  <p>Free hosting on Vercel + Supabase database — live in under 10 minutes</p>
+</div>
+
+<div class="container">
+
+  <div class="toc">
+    <h2>Steps</h2>
+    <ol>
+      <li><a href="#step1">Step 1 — Set up Supabase Database</a></li>
+      <li><a href="#step2">Step 2 — Run the SQL Schema</a></li>
+      <li><a href="#step3">Step 3 — Push code to GitHub</a></li>
+      <li><a href="#step4">Step 4 — Deploy to Vercel (free)</a></li>
+      <li><a href="#step5">Step 5 — Add environment variables</a></li>
+      <li><a href="#step6">Step 6 — View your live nominations</a></li>
+    </ol>
+  </div>
+
+  <!-- Step 1 -->
+  <div class="step" id="step1">
+    <div class="step-num">1</div>
+    <h2>Set up Supabase Database</h2>
+    <p class="sub">Supabase is a free Postgres database — your project already has credentials configured.</p>
+
+    <div class="card">
+      <h3>✅ Your Supabase project is already created</h3>
+      <p>The <code>.env</code> file already contains your Supabase credentials:</p>
+      <pre>VITE_SUPABASE_URL=<span class="highlight2">https://tufbbqzykvagrmngtrkc.supabase.co</span>
+VITE_SUPABASE_PUBLISHABLE_KEY=<span class="highlight">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...</span></pre>
+      <div class="tip">
+        <strong>👉 Go to:</strong> <a href="https://supabase.com/dashboard/project/tufbbqzykvagrmngtrkc" style="color:#fcd57a">supabase.com/dashboard/project/tufbbqzykvagrmngtrkc</a>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- Step 2 -->
+  <div class="step" id="step2">
+    <div class="step-num">2</div>
+    <h2>Run the SQL Schema</h2>
+    <p class="sub">This creates the <code>nominations</code> and <code>votes</code> tables with Row Level Security.</p>
+
+    <div class="card">
+      <h3>📋 Instructions</h3>
+      <ol>
+        <li>Open your Supabase project dashboard</li>
+        <li>Click <strong>SQL Editor</strong> in the left sidebar</li>
+        <li>Click <strong>New Query</strong></li>
+        <li>Paste the SQL below and click <strong>Run</strong></li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>🗄️ SQL to run</h3>
+      <pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><span class="highlight">-- nominations table</span>
+create table if not exists public.nominations (
+  id               uuid primary key default gen_random_uuid(),
+  created_at       timestamptz not null default now(),
+  type             text not null check (type in (<span class="highlight2">'student', 'teacher'</span>)),
+  student_name     text,
+  student_class    text,
+  class_group      text,
+  school_name      text,
+  phone            text not null,
+  teacher_name     text,
+  award_category   text not null,
+  special_thing    text,
+  subject          text,
+  impact_story     text,
+  board            text,
+  care_rating      int check (care_rating between 1 and 5),
+  clarity_rating   int check (clarity_rating between 1 and 5),
+  motivation_rating int check (motivation_rating between 1 and 5),
+  support_rating   int check (support_rating between 1 and 5),
+  full_name        text,
+  experience       text,
+  status           text not null default <span class="highlight2">'pending'</span>
+                   check (status in (<span class="highlight2">'pending','shortlisted','winner','rejected'</span>))
+);
+
+<span class="highlight">-- votes table</span>
+create table if not exists public.votes (
+  id             uuid primary key default gen_random_uuid(),
+  created_at     timestamptz not null default now(),
+  nomination_id  uuid not null references public.nominations(id) on delete cascade,
+  voter_phone    text not null,
+  unique (nomination_id, voter_phone)
+);
+
+<span class="highlight">-- Row Level Security</span>
+alter table public.nominations enable row level security;
+alter table public.votes enable row level security;
+
+create policy "Anyone can submit nominations"
+  on public.nominations for insert with check (true);
+
+create policy "Public can view shortlisted"
+  on public.nominations for select
+  using (status in (<span class="highlight2">'shortlisted', 'winner'</span>));
+
+create policy "Anyone can vote"
+  on public.votes for insert with check (true);
+
+create policy "Anyone can read votes"
+  on public.votes for select using (true);</pre>
+      <div class="success">✅ After running, you'll see <code>nominations</code> and <code>votes</code> in your Tables sidebar.</div>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- Step 3 -->
+  <div class="step" id="step3">
+    <div class="step-num">3</div>
+    <h2>Push code to GitHub</h2>
+    <p class="sub">Vercel deploys directly from GitHub. Run these commands in the project folder.</p>
+
+    <div class="card">
+      <h3>💻 Terminal commands</h3>
+      <pre><span class="highlight3"># Navigate to your project folder</span>
+cd niatawards-main
+
+<span class="highlight3"># Initialize git (if not already done)</span>
+git init
+git add .
+git commit -m <span class="highlight2">"Initial commit — NIAT Awards 2026"</span>
+
+<span class="highlight3"># Create a new repo on GitHub, then:</span>
+git remote add origin https://github.com/<span class="highlight2">YOUR_USERNAME</span>/niat-awards.git
+git branch -M main
+git push -u origin main</pre>
+      <div class="tip"><strong>Tip:</strong> Go to <a href="https://github.com/new" style="color:#fcd57a">github.com/new</a> to create the repository first, then copy the remote URL it gives you.</div>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- Step 4 -->
+  <div class="step" id="step4">
+    <div class="step-num">4</div>
+    <h2>Deploy to Vercel (Free)</h2>
+    <p class="sub">Vercel auto-detects Vite/React and deploys in one click. Completely free for personal projects.</p>
+
+    <div class="card">
+      <h3>🚀 Deploy steps</h3>
+      <ol>
+        <li>Go to <a href="https://vercel.com/new" style="color:#7ba7ff">vercel.com/new</a> and sign in with GitHub</li>
+        <li>Click <strong>Import</strong> next to your <code>niat-awards</code> repository</li>
+        <li>Vercel auto-detects Vite — keep default settings</li>
+        <li>Click <strong>Deploy</strong> — takes about 60 seconds</li>
+      </ol>
+    </div>
+
+    <div class="url-box">
+      <div class="url">https://niat-awards.vercel.app</div>
+      <div class="desc">Your site will be live at a URL like this (you can customize it)</div>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- Step 5 -->
+  <div class="step" id="step5">
+    <div class="step-num">5</div>
+    <h2>Add Environment Variables</h2>
+    <p class="sub">Tell Vercel about your Supabase credentials — never commit secrets to git.</p>
+
+    <div class="card">
+      <h3>🔑 In Vercel dashboard</h3>
+      <ol>
+        <li>Go to your project → <strong>Settings</strong> → <strong>Environment Variables</strong></li>
+        <li>Add each variable below:</li>
+      </ol>
+      <pre>VITE_SUPABASE_URL
+→ <span class="highlight2">https://tufbbqzykvagrmngtrkc.supabase.co</span>
+
+VITE_SUPABASE_PUBLISHABLE_KEY
+→ <span class="highlight">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1ZmJicXp5a3ZhZ3Jtbmd0cmtjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NDE5OTksImV4cCI6MjA5MTAxNzk5OX0.Mr86o070kEgp-RWbgZ2vzDytOS8XrwZGUiMPw831D3w</span></pre>
+      <li style="color:#bbb;font-size:14px;margin-top:12px;list-style:none">3. Click <strong style="color:white">Redeploy</strong> after saving the variables.</li>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- Step 6 -->
+  <div class="step" id="step6">
+    <div class="step-num">6</div>
+    <h2>View your live nominations</h2>
+    <p class="sub">Every form submission is stored in Supabase. Access it anytime from the dashboard.</p>
+
+    <div class="card">
+      <h3>📊 Viewing nominations in Supabase</h3>
+      <ol>
+        <li>Go to Supabase Dashboard → <strong>Table Editor</strong></li>
+        <li>Click <code>nominations</code> table to see all submissions</li>
+        <li>Use the <strong>status</strong> column to mark nominations as <code>shortlisted</code> or <code>winner</code></li>
+        <li>Shortlisted entries automatically appear on the public vote page</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>🔍 Quick SQL to view recent nominations</h3>
+      <pre>select id, created_at, type, teacher_name, award_category, status
+from nominations
+order by created_at desc
+limit 50;</pre>
+    </div>
+
+    <div class="card">
+      <h3>📈 Vote counts per teacher</h3>
+      <pre>select teacher_name, award_category, count(*) as votes
+from nominations n
+join votes v on v.nomination_id = n.id
+group by teacher_name, award_category
+order by votes desc;</pre>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- Architecture summary -->
+  <div class="card">
+    <h3>🏗️ Architecture Summary</h3>
+    <div style="margin-top:8px">
+      <span class="tag free">FREE</span> <strong style="color:white">Vercel</strong> — Hosts the React/Vite frontend. Auto-deploys on every git push. 100GB bandwidth free.<br/><br/>
+      <span class="tag db">DATABASE</span> <strong style="color:white">Supabase</strong> — Postgres database with Row Level Security. 500MB storage + 50,000 MAU free.<br/><br/>
+      <span class="tag free">FREE</span> <strong style="color:white">GitHub</strong> — Source code & deployment trigger. Every push → Vercel rebuilds automatically.
+    </div>
+  </div>
+
+  <div class="final">
+    <h2>🎉 You're all set!</h2>
+    <p>Your NIAT Awards site will be live with a working database that stores every nomination.</p>
+    <p style="margin-top:8px;font-size:13px">Total cost: ₹0 &nbsp;·&nbsp; Setup time: ~10 minutes &nbsp;·&nbsp; Free tier is more than enough for this project</p>
+  </div>
+
+</div>
+
+<script>
+function copyCode(btn) {
+  const pre = btn.parentElement;
+  const text = pre.innerText.replace('Copy','').trim();
+  navigator.clipboard.writeText(text).then(()=>{
+    btn.textContent='Copied!';
+    btn.style.color='#34d399';
+    setTimeout(()=>{ btn.textContent='Copy'; btn.style.color=''; },2000);
+  });
+}
+</script>
+</body>
+</html>

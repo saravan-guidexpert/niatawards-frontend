@@ -1,0 +1,33 @@
+{
+  "name": "NIAT Future-Ready Educator Awards 2026",
+  "short_name": "NIAT Awards",
+  "description": "Nominate your favourite teacher for India's Future-Ready Educator Awards 2026",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0505",
+  "theme_color": "#6B1212",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/niat-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/niat-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["education", "social"],
+  "lang": "en-IN",
+  "dir": "ltr",
+  "shortcuts": [
+    {
+      "name": "Nominate a Teacher",
+      "short_name": "Nominate",
+      "description": "Submit a teacher nomination",
+      "url": "/nominate",
+      "icons": [{ "src": "/niat-logo.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Vote for Teachers",
+      "short_name": "Vote",
+      "description": "Vote for shortlisted teachers",
+      "url": "/vote",
+      "icons": [{ "src": "/niat-logo.png", "sizes": "96x96" }]
+    }
+  ]
+}
