@@ -3,7 +3,8 @@ const API_URL =
   rawApiUrl && !rawApiUrl.includes("localhost")
     ? rawApiUrl
     : "https://niatawards-backend.vercel.app";
-const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET ?? "niat_admin_2026_secret";
+const ADMIN_SECRET =
+  (import.meta.env.VITE_ADMIN_SECRET || "").trim() || "niat_admin_2026_secret";
 
 export class ApiError extends Error {
   code?: string;
