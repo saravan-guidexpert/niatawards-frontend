@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
+const API_URL = (import.meta.env.VITE_API_URL ?? "https://niatawards-backend.vercel.app").replace(/\/$/, "");
 const ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET ?? "niat_admin_2026_secret";
 
 export class ApiError extends Error {
