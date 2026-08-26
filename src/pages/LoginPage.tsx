@@ -29,10 +29,10 @@ const LoginPage = () => {
   const handleVerifyOtp = async () => {
     if (otp.length < 6) return;
     setLoading(true);
-    const ok = await verifyOtp(otp, name.trim());
+    const result = await verifyOtp(otp, name.trim());
     setLoading(false);
-    if (ok) setStep("name");
-    else { toast({ title: "Invalid OTP", variant: "destructive" }); setOtp(""); }
+    if (result.success) setStep("name");
+    else { toast({ title: result.error || "Invalid OTP", variant: "destructive" }); setOtp(""); }
   };
 
   const handleComplete = () => {

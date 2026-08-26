@@ -3,6 +3,8 @@ import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion"
 import { Star, ArrowRight, Calendar, Sparkles, User, Phone, Loader2, CheckCircle2, ChevronDown, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import InlineNominationForm from "@/components/nomination/InlineNominationForm";
+import { createNominationDraft, updateNominationDraft } from "@/lib/api";
+import { getDraftSession, saveDraftSession } from "@/lib/nominationDraft";
 
 declare function gtag(...args: any[]): void;
 const track = (event: string, params?: Record<string, any>) => { try { gtag("event", event, params); } catch {} };
@@ -76,29 +78,91 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
+  const [draftToken, setDraftToken] = useState(getDraftSession()?.token || "");
+  const skippedOtpRef = useRef(false);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const persistDraft = async (nominatorName: string, nominatorPhone: string, resume = false) => {
+    const draft = await createNominationDraft({
+      type: lockedRole,
+      nominator_name: nominatorName,
+      nominator_phone: nominatorPhone,
+      ...(resume ? { resume: true } : {}),
+    });
+    const token = String(draft.draft_token);
+    setDraftToken(token);
+    saveDraftSession({
+      id: String(draft.id),
+      token,
+      type: lockedRole,
+      phone: nominatorPhone.replace(/\D/g, "").slice(-10),
+    });
+    return token;
+  };
 
   // If already logged in, go straight to nomination form
   useEffect(() => {
-    if (isAuthenticated) setStep("nominate");
+    if (!isAuthenticated || skippedOtpRef.current) return;
+    skippedOtpRef.current = true;
+    const nominatorName = user?.name || name;
+    const nominatorPhone = user?.phone || phone;
+    if (!nominatorName.trim() || nominatorPhone.replace(/\D/g, "").length < 10) {
+      setStep("nominate");
+      return;
+    }
+    const existing = getDraftSession();
+    if (existing?.token && existing.type === lockedRole && existing.phone === nominatorPhone.replace(/\D/g, "").slice(-10)) {
+      setDraftToken(existing.token);
+      setStep("nominate");
+      return;
+    }
+    persistDraft(nominatorName.trim(), nominatorPhone, true)
+      .catch(() => undefined)
+      .finally(() => setStep("nominate"));
   }, [isAuthenticated]);
 
-  const handleSend = async () => {
+  const handleSend = async (resend = false) => {
     if (!name.trim()) { toast({ title: "Please enter your name", variant: "destructive" }); return; }
     if (phone.replace(/\D/g, "").length < 10) { toast({ title: "Enter a valid 10-digit number", variant: "destructive" }); return; }
+    if (resend && resendIn > 0) return;
     setLoading(true);
-    const result = await sendOtp(phone);
-    setLoading(false);
-    if (result.success) { track("get_otp_clicked"); setStep("otp"); }
-    else toast({ title: result.error || "Failed to send OTP", variant: "destructive" });
+    try {
+      let token = draftToken;
+      if (!resend) {
+        token = await persistDraft(name.trim(), phone);
+      }
+      const result = await sendOtp(phone, resend);
+      if (!result.success) {
+        toast({ title: result.error || "Failed to send OTP", variant: "destructive" });
+        return;
+      }
+      track(resend ? "otp_resent" : "get_otp_clicked");
+      setResendIn(30);
+      if (resend) toast({ title: `OTP resent to +91 ${phone}` });
+      if (token) {
+        await updateNominationDraft({ draft_token: token, form_step: "otp_sent" }).catch(() => undefined);
+      }
+      if (!resend) setStep("otp");
+    } catch (err: any) {
+      toast({ title: err.message || "Failed to send OTP", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerify = async () => {
     if (otp.length < 6) return;
     setLoading(true);
-    const ok = await verifyOtp(otp, name.trim());
+    const result = await verifyOtp(otp, name.trim(), draftToken || undefined);
     setLoading(false);
-    if (ok) { track("otp_verified"); setStep("nominate"); }
-    else { toast({ title: "Invalid OTP. Please try again.", variant: "destructive" }); setOtp(""); }
+    if (result.success) { track("otp_verified"); setStep("nominate"); }
+    else { toast({ title: result.error || "Invalid OTP. Please try again.", variant: "destructive" }); setOtp(""); }
   };
 
   // Show inline nomination form after OTP verified
@@ -108,6 +172,7 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
         userName={user?.name || name}
         userPhone={user?.phone || phone}
         lockedRole={lockedRole}
+        draftToken={draftToken}
         onClose={() => setStep("form")}
       />
     );
@@ -144,7 +209,7 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
                 onKeyDown={(e: any) => e.key === "Enter" && handleSend()}
                 type="tel" inputMode="numeric" maxLength={10} placeholder="10-digit number" />
               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                id="btn-hero-send-otp" onClick={handleSend} disabled={loading}
+                id="btn-hero-send-otp" onClick={() => handleSend()} disabled={loading}
                 className="w-full h-12 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 relative overflow-hidden disabled:opacity-60 mt-1"
                 style={{ background: "linear-gradient(135deg, #9B2020, #7A1515)", color: "#fff", boxShadow: "0 4px 20px rgba(107,18,18,0.5)" }}>
                 <motion.div animate={{ x: [-200, 400] }} transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 4 }}
@@ -188,9 +253,9 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
                 style={{ background: "linear-gradient(135deg, #9B2020, #7A1515)", color: "#fff", boxShadow: "0 4px 20px rgba(107,18,18,0.4)" }}>
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Verify &amp; Continue</>}
               </motion.button>
-              <button id="btn-hero-resend-otp" onClick={handleSend}
-                className="w-full text-center text-[12px] text-white/35 hover:text-secondary transition-colors py-1">
-                Didn't receive OTP? Resend
+              <button id="btn-hero-resend-otp" onClick={() => handleSend(true)} disabled={loading || resendIn > 0}
+                className="w-full text-center text-[12px] text-white/35 hover:text-secondary disabled:hover:text-white/35 disabled:cursor-not-allowed transition-colors py-1">
+                {resendIn > 0 ? `Resend OTP in ${resendIn}s` : "Didn't receive OTP? Resend"}
               </button>
             </motion.div>
           )}

@@ -53,7 +53,8 @@ const formatDateIn = (value: string) => new Date(value).toLocaleDateString("en-I
 
 const COPY_HEADERS = [
   "Type", "Teacher/Applicant", "Student", "School", "Category", "Class",
-  "Phone", "Status", "Date", "Photo URL", "Special thing", "Impact story",
+  "Teacher Phone", "User Name", "User Phone", "Status", "Date", "Photo URL",
+  "Special thing", "Impact story",
   "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content",
 ];
 
@@ -65,6 +66,8 @@ const nominationRow = (n: any) => [
   n.award_category || "",
   classOrExp(n),
   n.phone || "",
+  n.nominator_name || "",
+  n.nominator_phone || "",
   n.status || "",
   n.created_at ? formatDateIn(n.created_at) : "",
   n.photo_url || "",
@@ -104,6 +107,19 @@ const utmChipClass = (source: string) => {
   if (k === "direct") return "bg-white/8 text-white/45 border-white/12";
   return "bg-secondary/15 text-secondary border-secondary/25";
 };
+
+// `phone` is the teacher's number (their own, on a self-nomination); `nominator_phone`
+// is whoever filled the form. Both are shown because admins contact either side.
+const PhonePair = ({ n }: { n: any }) => (
+  <div className="space-y-0.5 text-xs leading-tight">
+    <p className="text-primary-foreground/75">
+      <span className="text-primary-foreground/35">Teacher </span>{n.phone || "—"}
+    </p>
+    <p className="text-primary-foreground/75">
+      <span className="text-primary-foreground/35">User </span>{n.nominator_phone || "—"}
+    </p>
+  </div>
+);
 
 const UtmChip = ({ n, className = "" }: { n: any; className?: string }) => {
   const source = utmSourceKey(n);
@@ -219,7 +235,8 @@ const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: 
     </div>
     <div className="grid grid-cols-2 gap-2 text-xs">
       <p className="text-white/40">Student: <span className="text-white/80">{n.student_name || "—"}</span></p>
-      <p className="text-white/40">Phone: <span className="text-white/80">{n.phone || "—"}</span></p>
+      <p className="text-white/40">Teacher phone: <span className="text-white/80">{n.phone || "—"}</span></p>
+      <p className="text-white/40">User phone: <span className="text-white/80">{n.nominator_phone || "—"}</span></p>
       <p className="text-white/40">Category: <span className="text-white/80">{n.award_category || "—"}</span></p>
       <p className="text-white/40">Class: <span className="text-white/80">{classOrExp(n) || "—"}</span></p>
       {n.subject && <p className="text-white/40 col-span-2">Subject: <span className="text-white/80">{n.subject}</span></p>}
@@ -611,11 +628,12 @@ const AdminPage = () => {
   };
 
   const filtered = nominations.filter(n => {
-    const name = (n.teacher_name || n.full_name || "").toLowerCase();
-    const school = (n.school_name || "").toLowerCase();
-    const studentName = (n.student_name || "").toLowerCase();
-    const phone = (n.phone || "").toLowerCase();
-    const matchSearch = name.includes(search.toLowerCase()) || school.includes(search.toLowerCase()) || studentName.includes(search.toLowerCase()) || phone.includes(search.toLowerCase());
+    const q = search.toLowerCase();
+    const haystack = [
+      n.teacher_name, n.full_name, n.school_name, n.student_name,
+      n.phone, n.nominator_name, n.nominator_phone,
+    ];
+    const matchSearch = haystack.some(v => String(v || "").toLowerCase().includes(q));
     const matchCategory = categoryFilter === "All" || n.award_category === categoryFilter;
     const matchStatus = statusFilter === "All" || n.status === statusFilter;
     const matchType = typeFilter === "All" || n.type === typeFilter;
@@ -913,7 +931,7 @@ const AdminPage = () => {
                   <div className="flex flex-col gap-2">
                     <div className="relative w-full">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary-foreground/30" />
-                      <Input placeholder="Search teacher, student, school..." value={search} onChange={(e) => setSearch(e.target.value)}
+                      <Input placeholder="Search teacher, student, school, phone..." value={search} onChange={(e) => setSearch(e.target.value)}
                         className="pl-9 w-full bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9" />
                     </div>
                     <div className="grid grid-cols-2 lg:flex lg:flex-wrap gap-2">
@@ -1002,7 +1020,8 @@ const AdminPage = () => {
                       <h3 className="font-heading font-bold text-white text-lg leading-tight">{displayName(n)}</h3>
                       <p className="text-sm text-primary-foreground/60">{n.school_name || "—"}</p>
                       {n.student_name && <p className="text-xs text-primary-foreground/45">Student: {n.student_name}</p>}
-                      <p className="text-sm text-primary-foreground/70">{n.phone || "—"}</p>
+                      <p className="text-sm text-primary-foreground/70">Teacher: {n.phone || "—"}</p>
+                      <p className="text-sm text-primary-foreground/70">User: {n.nominator_phone || "—"}</p>
                       <p className="text-xs text-primary-foreground/40">{n.created_at ? formatDateIn(n.created_at) : "—"}</p>
                       {n.award_category && (
                         <Badge variant="outline" className="text-[10px] border-primary-foreground/20 text-primary-foreground/60">{n.award_category.replace(" Award", "")}</Badge>
@@ -1020,10 +1039,10 @@ const AdminPage = () => {
                 ))}
               </div>
               <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full min-w-[700px]">
+                <table className="w-full min-w-[740px]">
                   <thead>
                     <tr className="border-b border-primary-foreground/10">
-                      {["Type","Photo","Teacher / Applicant","Student","School","Campaign","Phone","Status","Date","Actions"].map(h => (
+                      {["Type","Photo","Teacher / Applicant","Student","School","Campaign","Phones","Status","Date","Actions"].map(h => (
                         <th key={h} className="text-left text-[10px] sm:text-xs font-semibold text-primary-foreground/40 uppercase tracking-wider px-4 sm:px-5 py-3">{h}</th>
                       ))}
                     </tr>
@@ -1056,10 +1075,12 @@ const AdminPage = () => {
                         </td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[100px] truncate">{n.student_name || "—"}</td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[120px] truncate">{n.school_name || "—"}</td>
-                        <td className="px-4 sm:px-5 py-3">
+                        <td className="px-4 sm:px-5 py-3 max-w-[190px]">
                           <UtmChip n={n} />
                         </td>
-                        <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60">{n.phone || "—"}</td>
+                        <td className="px-4 sm:px-5 py-3 whitespace-nowrap">
+                          <PhonePair n={n} />
+                        </td>
                         <td className="px-4 sm:px-5 py-3"><StatusBadge status={n.status} /></td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/40 whitespace-nowrap">{new Date(n.created_at).toLocaleDateString("en-IN")}</td>
                         <td className="px-3 py-3">

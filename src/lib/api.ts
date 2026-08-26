@@ -43,17 +43,57 @@ const adminHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-export const apiSendOtp = (phone: string) =>
+export const apiSendOtp = (phone: string, resend = false) =>
   request<{ success: boolean }>("/api/otp/send", {
     method: "POST",
-    body: JSON.stringify({ phone }),
+    body: JSON.stringify({ phone, ...(resend ? { resend: true } : {}) }),
   });
 
-export const apiVerifyOtp = (phone: string, otp: string) =>
+export const apiVerifyOtp = (phone: string, otp: string, draftToken?: string) =>
   request<{ success: boolean }>("/api/otp/verify", {
     method: "POST",
-    body: JSON.stringify({ phone, otp }),
+    body: JSON.stringify({
+      phone,
+      otp,
+      ...(draftToken ? { draft_token: draftToken } : {}),
+    }),
   });
+
+export type NominationDraft = Record<string, unknown> & {
+  id: string;
+  draft_token?: string;
+};
+
+export const createNominationDraft = async (payload: Record<string, unknown>) => {
+  const data = await request<NominationDraft>("/api/nominations/draft", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, ...getUtmParams() }),
+  });
+  if (!data?.id || !data.draft_token) {
+    throw new ApiError("Could not start the nomination. Please try again.");
+  }
+  return data;
+};
+
+export const updateNominationDraft = async (payload: Record<string, unknown>) => {
+  const data = await request<NominationDraft>("/api/nominations/draft", {
+    method: "PATCH",
+    body: JSON.stringify({ ...payload, ...getUtmParams() }),
+  });
+  if (!data?.id) {
+    throw new ApiError("Could not save your details. Please try again.");
+  }
+  return data;
+};
+
+export const getNominationDraft = async (draftToken: string) => {
+  const token = encodeURIComponent(draftToken.trim());
+  const data = await request<NominationDraft>(`/api/nominations/draft?draft_token=${token}`);
+  if (!data?.id) {
+    throw new ApiError("Could not load your saved details. Please try again.");
+  }
+  return data;
+};
 
 export const createNomination = async (payload: Record<string, unknown>) => {
   const data = await request<Record<string, unknown>>("/api/nominations", {

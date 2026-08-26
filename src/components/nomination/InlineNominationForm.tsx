@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, X, CheckCircle2, Loader2, ArrowRight, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { createNomination } from "@/lib/api";
+import { createNominationDraft, getNominationDraft, updateNominationDraft, type NominationDraft } from "@/lib/api";
+import { clearDraftSession, getDraftSession, saveDraftSession } from "@/lib/nominationDraft";
 import { trackFunnel } from "@/lib/funnel";
 import TeacherPhotoUpload from "@/components/nomination/TeacherPhotoUpload";
 
@@ -85,9 +86,10 @@ interface Props {
   onClose?: () => void;
   embedded?: boolean; // true = no dark card wrapper (used on /nominate page)
   lockedRole: "student" | "teacher";
+  draftToken?: string;
 }
 
-const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded = false, lockedRole }: Props) => {
+const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded = false, lockedRole, draftToken }: Props) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -100,6 +102,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
   const [loading, setLoading]   = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [token, setToken] = useState(draftToken || getDraftSession()?.token || "");
 
   const iStyle = { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff" };
   const iCls   = "w-full h-10 rounded-lg px-3 text-[13px] font-medium text-white placeholder:text-white/35 focus:outline-none transition-all";
@@ -117,6 +120,130 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
   const setSF = (k: string, v: string) => setSf(p => ({ ...p, [k]: v }));
   const setTF = (k: string, v: string) => setTf(p => ({ ...p, [k]: v }));
 
+  const hydratedRef = useRef(false);
+  const skipDebounceRef = useRef(true);
+  const submittingRef = useRef(false);
+
+  const asText = (value: unknown) => (typeof value === "string" ? value : "");
+
+  const applyDraft = (draft: NominationDraft) => {
+    const teacherName = asText(draft.teacher_name);
+    const nominatorPhone = asText(draft.nominator_phone) || phone.replace(/\D/g, "").slice(-10);
+    const savedPhone = asText(draft.phone);
+    setSf((prev) => ({
+      ...prev,
+      studentName: asText(draft.student_name) || prev.studentName || name,
+      currentEducation: asText(draft.student_class) || prev.currentEducation,
+      schoolName: asText(draft.school_name) || prev.schoolName,
+      teacherName: teacherName || prev.teacherName,
+      teacherPhone: teacherName ? savedPhone : prev.teacherPhone,
+      teachingSubject: asText(draft.subject) || prev.teachingSubject,
+      specialThing: asText(draft.special_thing) || prev.specialThing,
+      impactStory: asText(draft.impact_story) || prev.impactStory,
+      awardsRecognition: asText(draft.board) || prev.awardsRecognition,
+      teacherSocial: asText(draft.teacher_social) || prev.teacherSocial,
+    }));
+    setTf((prev) => ({
+      ...prev,
+      fullName: asText(draft.full_name) || prev.fullName || name,
+      school: asText(draft.school_name) || prev.school,
+      subject: asText(draft.subject) || prev.subject,
+      experience: asText(draft.experience) || prev.experience,
+      classesTeaching: asText(draft.student_class) || prev.classesTeaching,
+      impactStory: asText(draft.impact_story) || prev.impactStory,
+      phone: savedPhone || nominatorPhone || prev.phone,
+    }));
+    const photo = asText(draft.photo_url);
+    if (photo) setPhotoUrl(photo);
+    if (draft.form_step === "details") setFormStep(2);
+  };
+
+  const rememberSession = (draft: NominationDraft, fallbackPhone: string) => {
+    if (typeof draft.draft_token !== "string") return;
+    setToken(draft.draft_token);
+    saveDraftSession({
+      id: String(draft.id),
+      token: draft.draft_token,
+      type: role,
+      phone: fallbackPhone.replace(/\D/g, "").slice(-10),
+    });
+  };
+
+  const step2Payload = () =>
+    role === "student"
+      ? {
+          special_thing: sf.specialThing.trim() || null,
+          impact_story: sf.impactStory.trim() || null,
+          board: sf.awardsRecognition.trim() || null,
+          teacher_social: sf.teacherSocial.trim() || null,
+          photo_url: photoUrl || null,
+        }
+      : {
+          impact_story: tf.impactStory.trim() || null,
+          photo_url: photoUrl || null,
+        };
+
+  useEffect(() => {
+    if (draftToken) setToken(draftToken);
+  }, [draftToken]);
+
+  useEffect(() => {
+    if (!token || hydratedRef.current) return;
+    let cancelled = false;
+    getNominationDraft(token)
+      .then((draft) => {
+        if (cancelled) return;
+        applyDraft(draft);
+        hydratedRef.current = true;
+        skipDebounceRef.current = true;
+      })
+      .catch(() => {
+        if (!cancelled) hydratedRef.current = true;
+      });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  useEffect(() => {
+    if (token || !name.trim() || phone.replace(/\D/g, "").length < 10) return;
+    let cancelled = false;
+    createNominationDraft({
+      type: role,
+      nominator_name: name.trim(),
+      nominator_phone: phone,
+      resume: true,
+    })
+      .then((draft) => {
+        if (cancelled || typeof draft.draft_token !== "string") return;
+        rememberSession(draft, phone);
+        applyDraft(draft);
+        hydratedRef.current = true;
+        skipDebounceRef.current = true;
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [token, name, phone, role]);
+
+  useEffect(() => {
+    if (formStep !== 2 || !token || !hydratedRef.current || submittingRef.current) return;
+    if (skipDebounceRef.current) {
+      skipDebounceRef.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      if (submittingRef.current) return;
+      updateNominationDraft({ draft_token: token, ...step2Payload() }).catch(() => undefined);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [
+    formStep,
+    token,
+    sf.specialThing,
+    sf.impactStory,
+    sf.awardsRecognition,
+    sf.teacherSocial,
+    tf.impactStory,
+  ]);
+
   const educationOptions = [
     "School – Class 1 to 5", "School – Class 6 to 8",
     "School – Class 9 to 10", "School – Class 11 to 12",
@@ -129,7 +256,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
     "Undergraduate / College", "Postgraduate / College", "All Classes",
   ];
 
-  const handleStep1Next = (e: React.FormEvent) => {
+  const handleStep1Next = async (e: React.FormEvent) => {
     e.preventDefault();
     if (role === "student") {
       if (!sf.currentEducation) { toast({ title: "Please select your current education", variant: "destructive" }); return; }
@@ -144,21 +271,59 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
       if (!tf.experience) { toast({ title: "Please enter years of experience", variant: "destructive" }); return; }
       if (!tf.classesTeaching) { toast({ title: "Please select which class you teach", variant: "destructive" }); return; }
     }
-    track("form_step2_opened", { role });
-    if (phone) trackFunnel("form_step1", phone, role);
-    setFormStep(2);
+    if (!token) { toast({ title: "Please verify OTP first", variant: "destructive" }); return; }
+    setLoading(true);
+    try {
+      const payload = role === "student"
+        ? {
+            draft_token: token,
+            form_step: "details",
+            student_name: sf.studentName.trim(),
+            student_class: sf.currentEducation,
+            school_name: sf.schoolName.trim(),
+            teacher_name: sf.teacherName.trim(),
+            phone: sf.teacherPhone.trim(),
+            subject: sf.teachingSubject.trim(),
+          }
+        : {
+            draft_token: token,
+            form_step: "details",
+            full_name: tf.fullName.trim(),
+            school_name: tf.school.trim(),
+            phone: tf.phone.trim(),
+            subject: tf.subject.trim(),
+            experience: tf.experience,
+            student_class: tf.classesTeaching,
+          };
+      await updateNominationDraft(payload);
+      track("form_step2_opened", { role });
+      if (phone) trackFunnel("form_step1", phone, role);
+      skipDebounceRef.current = true;
+      setFormStep(2);
+    } catch (err: any) {
+      toast({
+        title: "Could not save details",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    submittingRef.current = true;
     try {
+      if (!token) throw new Error("Please verify OTP first");
       if (photoBusy) throw new Error("Please wait for the photo to finish uploading");
       if (role === "student") {
         if (!sf.specialThing.trim()) throw new Error("Please fill in what's special about this teacher");
         if (!sf.impactStory.trim()) throw new Error("Please describe their impact");
-        await createNomination({
-          type: "student",
+        await updateNominationDraft({
+          draft_token: token,
+          complete: true,
           student_name: sf.studentName.trim(),
           student_class: sf.currentEducation,
           school_name: sf.schoolName.trim(),
@@ -169,12 +334,14 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
           subject: sf.teachingSubject.trim() || null,
           impact_story: sf.impactStory.trim() || null,
           board: sf.awardsRecognition.trim() || null,
+          teacher_social: sf.teacherSocial.trim() || null,
           photo_url: photoUrl || null,
         });
       } else {
         if (!tf.impactStory.trim()) throw new Error("Please share your impact story");
-        await createNomination({
-          type: "teacher",
+        await updateNominationDraft({
+          draft_token: token,
+          complete: true,
           full_name: tf.fullName.trim(),
           school_name: tf.school.trim(),
           subject: tf.subject.trim(),
@@ -186,9 +353,11 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
           photo_url: photoUrl || null,
         });
       }
+      clearDraftSession();
       track("nomination_submitted", { role });
       navigate(`/thank-you?type=${role}`);
     } catch (err: any) {
+      submittingRef.current = false;
       console.error("Nomination submit failed:", err);
       toast({
         title: "Submission failed",
@@ -198,6 +367,19 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePhotoChange = (url: string) => {
+    setPhotoUrl(url);
+    if (!token || submittingRef.current) return;
+    updateNominationDraft({ draft_token: token, photo_url: url || null }).catch(() => undefined);
+  };
+
+  const handleBackToDetails = () => {
+    if (token && !submittingRef.current) {
+      updateNominationDraft({ draft_token: token, ...step2Payload() }).catch(() => undefined);
+    }
+    setFormStep(1);
   };
 
   const formContent = (
@@ -276,9 +458,9 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
             )}
 
             {role && (
-              <button type="submit" className="w-full h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 mt-1"
+              <button type="submit" disabled={loading} className="w-full h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 mt-1 disabled:opacity-60"
                 style={{ background: "linear-gradient(135deg,#9B2020,#7A1515)", color: "#fff", boxShadow: "0 4px 16px rgba(107,18,18,0.5)" }}>
-                Next — Tell Us More <ArrowRight className="w-3.5 h-3.5" />
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Next — Tell Us More <ArrowRight className="w-3.5 h-3.5" /></>}
               </button>
             )}
           </motion.form>
@@ -295,19 +477,19 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
                 <FormTextarea label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." required rows={3} />
                 <input style={iStyle} className={iCls} placeholder="Awards / Recognition (Optional)" value={sf.awardsRecognition} onChange={e => setSF("awardsRecognition", e.target.value)} />
                 <input style={iStyle} className={iCls} placeholder="Teacher's LinkedIn / Social Media (Optional)" value={sf.teacherSocial} onChange={e => setSF("teacherSocial", e.target.value)} />
-                <TeacherPhotoUpload value={photoUrl} onChange={setPhotoUrl} variant="dark" onBusyChange={setPhotoBusy} />
+                <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
               </div>
             )}
 
             {role === "teacher" && (
               <div className="space-y-2">
                 <FormTextarea label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
-                <TeacherPhotoUpload value={photoUrl} onChange={setPhotoUrl} variant="dark" onBusyChange={setPhotoBusy} />
+                <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
               </div>
             )}
 
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={() => setFormStep(1)}
+              <button type="button" onClick={handleBackToDetails}
                 className="h-10 px-4 rounded-lg font-semibold text-[13px] flex items-center gap-1 text-white/60 hover:text-white transition-all"
                 style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <ChevronDown className="w-3.5 h-3.5 rotate-90" /> Back
