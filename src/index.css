@@ -45,11 +45,15 @@
 
 @layer base {
   * { @apply border-border; }
-  body {
+  html, body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
     font-family: 'Inter', 'DM Sans', sans-serif;
   }
   h1, h2, h3, h4, h5, h6 { font-family: 'DM Sans', 'Inter', sans-serif; }
+  #root, main, .container {
+    min-width: 0;
+  }
 }
 
 @layer utilities {
@@ -79,9 +83,6 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 /* Smooth scrolling */
 html { scroll-behavior: smooth; }
-
-/* Prevent horizontal scroll */
-body { overflow-x: hidden; }
 
 /* Better touch scrolling */
 * { -webkit-overflow-scrolling: touch; }

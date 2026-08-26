@@ -248,8 +248,8 @@ const VotePage = () => {
 
       {/* Sticky bar */}
       <div className="sticky top-[56px] z-20 bg-[#0a0a0a]/95 backdrop-blur-xl border-b border-white/[0.06]">
-        <div className="container px-4 py-3 flex items-center gap-2 sm:gap-3">
-          <div className="relative flex-1">
+        <div className="container px-4 py-3 flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="relative flex-1 min-w-0 basis-40">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search teacher or school..."
               className="w-full pl-10 pr-4 h-10 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 text-sm focus:outline-none focus:border-white/20 transition-all" />

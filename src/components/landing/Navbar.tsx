@@ -43,14 +43,14 @@ const Navbar = () => {
         <div className="flex items-center justify-between px-4 sm:px-6" style={{ height: "56px" }}>
 
           {/* Logo — 237×56 lockup, height 32px mobile / 40px desktop */}
-          <Link to="/" className="flex-shrink-0 flex items-center no-underline">
+          <Link to="/" className="flex-shrink min-w-0 max-w-[55vw] sm:max-w-none flex items-center no-underline">
             <img
               src="/niat-lockup.svg?v=2"
               alt="NIAT - NxtWave of Innovation in Advanced Technologies"
               width={237}
               height={56}
-              className="h-8 w-auto sm:h-10"
-              style={{ display: "block", flexShrink: 0, objectFit: "contain" }}
+              className="h-8 w-auto sm:h-10 max-w-full"
+              style={{ display: "block", objectFit: "contain" }}
               fetchPriority="high"
             />
           </Link>

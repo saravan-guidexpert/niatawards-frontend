@@ -50,7 +50,7 @@ const NominatePage = () => {
     <div className="min-h-screen bg-gradient-dark" id="main-content" role="main">
       <Navbar />
       <div className="pt-[56px] min-h-screen flex items-start justify-center px-4 py-10">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-lg">
 
           {/* Header */}
           <div className="text-center mb-6">

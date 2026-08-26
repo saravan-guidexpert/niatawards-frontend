@@ -36,7 +36,7 @@ const FinalCTASection = () => {
           </motion.div>
 
           <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white mb-6 max-w-3xl mx-auto leading-[1.1]">
-            Every great teacher deserves to be celebrated
+            Every GOAT teacher deserves to be celebrated
           </h2>
           <p className="text-white/60 text-base sm:text-lg max-w-xl mx-auto mb-10 leading-relaxed">
             Nominate a teacher today and help them get the recognition they truly deserve.

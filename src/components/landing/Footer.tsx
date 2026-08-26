@@ -48,17 +48,17 @@ const Footer = () => (
         <p className="text-[11px] text-white/20 text-center sm:text-left">
           © 2026 Nxtwave of Innovation in Advanced Technologies. All rights reserved.
         </p>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
           <a href="https://www.ccbp.in/privacy-policy" target="_blank" rel="noopener noreferrer"
-            className="text-[11px] text-white/30 hover:text-white/60 transition-colors">
+            className="text-[11px] text-white/30 hover:text-white/60 transition-colors min-h-[44px] inline-flex items-center px-1">
             Privacy Policy
           </a>
           <a href="https://www.ccbp.in/terms-and-conditions" target="_blank" rel="noopener noreferrer"
-            className="text-[11px] text-white/30 hover:text-white/60 transition-colors">
+            className="text-[11px] text-white/30 hover:text-white/60 transition-colors min-h-[44px] inline-flex items-center px-1">
             Terms of Use
           </a>
           <a href="https://www.ccbp.in/grievance-redressal" target="_blank" rel="noopener noreferrer"
-            className="text-[11px] text-white/30 hover:text-white/60 transition-colors">
+            className="text-[11px] text-white/30 hover:text-white/60 transition-colors min-h-[44px] inline-flex items-center px-1">
             Grievance
           </a>
         </div>

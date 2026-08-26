@@ -113,7 +113,7 @@ const QuickNominateCard = () => {
   }
 
   return (
-    <div className="w-full rounded-2xl overflow-hidden"
+    <div className="min-w-0 w-full rounded-2xl overflow-hidden"
       style={{ background: "rgba(10,3,3,0.88)", border: "1.5px solid rgba(255,255,255,0.2)", backdropFilter: "blur(28px)", boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)" }}>
       <div className="h-[3px] w-full" style={{ background: "linear-gradient(90deg, transparent, #d97706, transparent)" }} />
       <div className="p-5 sm:p-6">
@@ -227,7 +227,7 @@ const HeroSection = () => {
         </div>
 
         <div className="w-full relative z-10 py-10 sm:py-16 px-4 sm:px-6 max-w-6xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center min-w-0">
 
             {/* Left */}
             <div>
@@ -242,14 +242,14 @@ const HeroSection = () => {
                 <motion.h1 initial={{ y: 80 }} animate={{ y: 0 }}
                   transition={{ duration: 0.7, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
                   className="font-heading text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-[1.05]">
-                  India's{" "}
+                  NIAT{" "}
                   <span className="relative inline-block">
-                    <span className="text-secondary">Future-Ready</span>
+                    <span className="text-secondary">Guru Ratna</span>
                     <motion.span initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
                       transition={{ duration: 0.6, delay: 0.8 }} style={{ originX: 0 }}
                       className="absolute bottom-0 left-0 right-0 h-[3px] bg-gradient-to-r from-secondary to-secondary/30 rounded-full" />
                   </span>
-                  <br />Educator Awards
+                  <br />Awards 2026
                 </motion.h1>
               </div>
 
@@ -259,7 +259,7 @@ const HeroSection = () => {
               </motion.p>
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
                 className="text-sm text-white/55 max-w-lg mb-8">
-                Nominate the educator who changed your life.
+                Nominate the teacher who changed your life.
               </motion.p>
 
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}
@@ -278,7 +278,7 @@ const HeroSection = () => {
             {/* Right */}
             <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.8, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              className="flex flex-col items-center gap-5 overflow-visible">
+              className="flex flex-col items-center gap-5 overflow-visible min-w-0 w-full">
 
               <div className="w-full text-center">
                 <p className="text-[11px] uppercase tracking-[0.25em] font-bold mb-4 text-secondary">
@@ -295,7 +295,7 @@ const HeroSection = () => {
                 </div>
               </div>
 
-              <div className="w-full">
+              <div className="min-w-0 w-full">
                 <QuickNominateCard />
               </div>
 

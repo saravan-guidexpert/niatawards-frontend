@@ -75,15 +75,76 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
+const NominationActions = ({
+  n,
+  updating,
+  stacked,
+  onView,
+  onEdit,
+  onStatus,
+}: {
+  n: any;
+  updating: string | null;
+  stacked?: boolean;
+  onView: () => void;
+  onEdit: () => void;
+  onStatus: (id: string, status: string) => void;
+}) => {
+  const btn = stacked
+    ? "flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-semibold w-full min-h-[44px] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+    : "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed";
+  const busy = (status: string) => updating === n.id + status;
+  const disabled = updating?.startsWith(n.id) ?? false;
+
+  return (
+    <div className={stacked ? "grid grid-cols-2 gap-1.5" : "flex flex-wrap items-center gap-1"}>
+      <button type="button" onClick={onView} className={`${btn} bg-white/5 hover:bg-white/10 text-white/50 hover:text-white`}>
+        <Eye className="w-3 h-3" /> View
+      </button>
+      <button type="button" onClick={onEdit} className={`${btn} bg-white/5 hover:bg-white/10 text-white/50 hover:text-white`}>
+        <Pencil className="w-3 h-3" /> Edit
+      </button>
+      {n.status !== "shortlisted" && n.status !== "winner" && (
+        <button type="button" onClick={() => onStatus(n.id, "shortlisted")} disabled={disabled}
+          className={`${btn} bg-blue-500/15 hover:bg-blue-500/25 text-blue-400`} title="Add to voting page">
+          {busy("shortlisted") ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+          Shortlist
+        </button>
+      )}
+      {n.status === "shortlisted" && (
+        <button type="button" onClick={() => onStatus(n.id, "pending")} disabled={disabled}
+          className={`${btn} bg-orange-500/15 hover:bg-orange-500/25 text-orange-400`} title="Remove from voting page">
+          {busy("pending") ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+          Revoke
+        </button>
+      )}
+      {n.status !== "winner" && (
+        <button type="button" onClick={() => onStatus(n.id, "winner")} disabled={disabled}
+          className={`${btn} bg-green-500/15 hover:bg-green-500/25 text-green-400`}>
+          {busy("winner") ? <Loader2 className="w-3 h-3 animate-spin" /> : <Award className="w-3 h-3" />}
+          Winner
+        </button>
+      )}
+      {n.status !== "rejected" && n.status !== "winner" && (
+        <button type="button" onClick={() => onStatus(n.id, "rejected")} disabled={disabled}
+          className={`${btn} bg-red-500/15 hover:bg-red-500/25 text-red-400`}>
+          {busy("rejected") ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+          Reject
+        </button>
+      )}
+    </div>
+  );
+};
+
 const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: any) => void }) => (
-  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-    <div className="flex items-start gap-4">
+  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:p-4 space-y-3">
+    <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
       {n.photo_url ? (
-        <button type="button" onClick={() => onPhotoClick?.(n)} className="flex-shrink-0">
-          <img src={n.photo_url} alt={displayName(n)} className="w-28 h-28 rounded-xl object-cover border border-white/10" />
+        <button type="button" onClick={() => onPhotoClick?.(n)} className="flex-shrink-0 w-full sm:w-auto">
+          <img src={n.photo_url} alt={displayName(n)} className="w-full h-44 sm:w-28 sm:h-28 rounded-xl object-cover border border-white/10" />
         </button>
       ) : (
-        <div className="w-28 h-28 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/25">
+        <div className="w-full h-32 sm:w-28 sm:h-28 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/25">
           <ImageOff className="w-8 h-8" />
         </div>
       )}
@@ -127,24 +188,24 @@ const ViewNominationsModal = ({
   onClose: () => void;
   onPhotoClick?: (n: any) => void;
 }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
     <motion.div
       initial={{ opacity: 0, scale: 0.96, y: 16 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       onClick={(e) => e.stopPropagation()}
-      className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+      className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90dvh] overflow-hidden flex flex-col"
     >
-      <div className="flex items-center justify-between p-5 border-b border-white/10">
+      <div className="flex items-center justify-between p-3 sm:p-5 border-b border-white/10">
         <div>
-          <h2 className="font-heading text-lg font-bold text-white">{title}</h2>
+          <h2 className="font-heading text-base sm:text-lg font-bold text-white">{title}</h2>
           <p className="text-xs text-white/40 mt-0.5">{nominations.length} nomination{nominations.length !== 1 ? "s" : ""}</p>
         </div>
         <button onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
           <X className="w-5 h-5" />
         </button>
       </div>
-      <div className="overflow-y-auto p-5 space-y-4">
+      <div className="overflow-y-auto p-3 sm:p-5 space-y-4 pb-6 safe-bottom">
         {nominations.map((n) => (
           <NominationDetailCard key={n.id} n={n} onPhotoClick={onPhotoClick} />
         ))}
@@ -161,19 +222,19 @@ const PhotoLightbox = ({ photo, onClose }: { photo: { url: string; name: string 
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.85)" }} onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
-        className="relative max-w-3xl w-full"
+        className="relative max-w-3xl w-full min-w-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <button onClick={onClose} className="absolute -top-10 right-0 text-white/70 hover:text-white">
-          <X className="w-6 h-6" />
+        <button onClick={onClose} className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-black/60 text-white/80 hover:text-white flex items-center justify-center">
+          <X className="w-5 h-5" />
         </button>
-        <img src={photo.url} alt={photo.name} className="w-full max-h-[80vh] object-contain rounded-xl" />
-        <p className="text-center text-white/80 text-sm mt-3">{photo.name}</p>
+        <img src={photo.url} alt={photo.name} className="w-full max-h-[80dvh] object-contain rounded-xl" />
+        <p className="text-center text-white/80 text-sm mt-3 px-2">{photo.name}</p>
       </motion.div>
     </div>
   );
@@ -215,15 +276,15 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.7)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.7)" }}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto safe-bottom"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-white/10 sticky top-0 bg-[#141414] z-10">
+        <div className="flex items-center justify-between p-3 sm:p-5 border-b border-white/10 sticky top-0 bg-[#141414] z-10">
           <div>
             <h2 className="font-heading text-lg font-bold text-white">Edit Nomination</h2>
             <p className="text-xs text-white/40 mt-0.5">Make changes and save</p>
@@ -234,12 +295,12 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
         </div>
 
         {/* Form */}
-        <div className="p-5 space-y-4">
+        <div className="p-3 sm:p-5 space-y-4">
 
           {/* Status — most important, at top */}
           <div className="bg-white/[0.03] rounded-xl p-4 border border-white/10">
             <Label className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 block">Application Status</Label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {["pending", "shortlisted", "winner", "rejected"].map(s => (
                 <button key={s} type="button"
                   onClick={() => set("status", s)}
@@ -360,7 +421,7 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-5 border-t border-white/10 sticky bottom-0 bg-[#141414]">
+        <div className="flex items-center justify-between p-3 sm:p-5 border-t border-white/10 sticky bottom-0 bg-[#141414]">
           <button onClick={onClose} className="text-white/40 hover:text-white text-sm transition-colors">
             Cancel
           </button>
@@ -759,20 +820,20 @@ const AdminPage = () => {
 
       {/* Header */}
       <div className="border-b border-primary-foreground/10 bg-[#6B1212]/95 backdrop-blur-lg sticky top-0 z-30">
-        <div className="container flex items-center justify-between h-14 px-3 sm:px-4">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <Link to="/" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors">
+        <div className="container flex flex-wrap items-center justify-between gap-2 min-h-14 py-2 px-3 sm:px-4">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <Link to="/" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors flex-shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#8B1A1A] to-[#6B1212] ring-1 ring-white/10 flex items-center justify-center flex-shrink-0">
               <img src="/niat-logo-tight.webp" alt="NIAT" className="w-5 h-5 object-contain" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">Admin Dashboard</h1>
-              <p className="text-[10px] sm:text-xs text-primary-foreground/40">Future-Ready Educator Awards 2026</p>
+              <p className="hidden sm:block text-xs text-primary-foreground/40">Future-Ready Educator Awards 2026</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
               <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
             </Button>
@@ -822,35 +883,35 @@ const AdminPage = () => {
           <>
             {/* Shortlisted → voting banner */}
             {shortlisted === 0 && pending > 0 && (
-              <div className="flex items-center justify-between p-4 rounded-xl mb-5 border border-amber-500/30 bg-amber-500/10">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-xl mb-5 border border-amber-500/30 bg-amber-500/10">
+                <div className="flex items-start sm:items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
                     <Star className="w-4 h-4 text-amber-400" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-white"><span className="text-amber-400">{pending}</span> nomination{pending !== 1 ? "s" : ""} awaiting review</p>
                     <p className="text-xs text-primary-foreground/40">Click <strong className="text-amber-400">Shortlist</strong> on any nomination below to make it appear on the voting page</p>
                   </div>
                 </div>
                 <Link to="/voteniatteachers" target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 text-xs font-semibold transition-all whitespace-nowrap">
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0">
                   Voting page ↗
                 </Link>
               </div>
             )}
             {shortlisted > 0 && (
-              <div className="flex items-center justify-between p-4 rounded-xl mb-5 border border-blue-500/20 bg-blue-500/10">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-xl mb-5 border border-blue-500/20 bg-blue-500/10">
+                <div className="flex items-start sm:items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
                     <CheckCircle2 className="w-4 h-4 text-blue-400" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold text-white"><span className="text-blue-400">{shortlisted}</span> nomination{shortlisted !== 1 ? "s" : ""} live on voting page</p>
                     <p className="text-xs text-primary-foreground/40">Public can vote for these teachers now</p>
                   </div>
                 </div>
                 <Link to="/voteniatteachers" target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 text-xs font-semibold transition-all">
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0">
                   View voting page ↗
                 </Link>
               </div>
@@ -961,64 +1022,107 @@ const AdminPage = () => {
                       </Button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <div className="relative flex-1 min-w-[160px]">
+                  <div className="flex flex-col gap-2">
+                    <div className="relative w-full">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary-foreground/30" />
                       <Input placeholder="Search teacher, student, school..." value={search} onChange={(e) => setSearch(e.target.value)}
-                        className="pl-9 bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9" />
+                        className="pl-9 w-full bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9" />
                     </div>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-primary-foreground/5 border border-primary-foreground/10 text-primary-foreground text-xs"
-                        >
-                          <CalendarIcon className="w-3.5 h-3.5 text-primary-foreground/50" />
-                          {dateFilter ? dateFilter.toLocaleDateString("en-IN") : "All dates"}
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-3 bg-[#141414] border-white/10" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={dateFilter}
-                          onSelect={setDateFilter}
-                          className="text-white"
-                        />
-                        {dateFilter && (
+                    <div className="grid grid-cols-2 lg:flex lg:flex-wrap gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
                           <button
                             type="button"
-                            onClick={() => setDateFilter(undefined)}
-                            className="mt-2 w-full text-xs text-white/60 hover:text-white py-1.5 rounded-md hover:bg-white/5"
+                            className="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md bg-primary-foreground/5 border border-primary-foreground/10 text-primary-foreground text-xs w-full min-w-0 lg:w-auto"
                           >
-                            Clear date
+                            <CalendarIcon className="w-3.5 h-3.5 text-primary-foreground/50 flex-shrink-0" />
+                            <span className="truncate">{dateFilter ? dateFilter.toLocaleDateString("en-IN") : "All dates"}</span>
                           </button>
-                        )}
-                      </PopoverContent>
-                    </Popover>
-                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                      <SelectTrigger className="w-auto min-w-[130px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c === "All" ? "All Categories" : c}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="w-auto min-w-[110px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {["All","pending","shortlisted","winner","rejected"].map(s => (
-                          <SelectItem key={s} value={s}>{s === "All" ? "All Status" : s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={typeFilter} onValueChange={setTypeFilter}>
-                      <SelectTrigger className="w-auto min-w-[100px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="All">All Types</SelectItem>
-                        <SelectItem value="student">Student</SelectItem>
-                        <SelectItem value="teacher">Teacher</SelectItem>
-                      </SelectContent>
-                    </Select>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto max-w-[calc(100vw-2rem)] p-3 bg-[#141414] border-white/10" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={dateFilter}
+                            onSelect={setDateFilter}
+                            className="text-white"
+                          />
+                          {dateFilter && (
+                            <button
+                              type="button"
+                              onClick={() => setDateFilter(undefined)}
+                              className="mt-2 w-full text-xs text-white/60 hover:text-white py-1.5 rounded-md hover:bg-white/5"
+                            >
+                              Clear date
+                            </button>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                      <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                        <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[130px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c === "All" ? "All Categories" : c}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[110px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["All","pending","shortlisted","winner","rejected"].map(s => (
+                            <SelectItem key={s} value={s}>{s === "All" ? "All Status" : s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={typeFilter} onValueChange={setTypeFilter}>
+                        <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[100px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All">All Types</SelectItem>
+                          <SelectItem value="student">Student</SelectItem>
+                          <SelectItem value="teacher">Teacher</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="overflow-x-auto -mx-3 sm:mx-0">
+              <div className="lg:hidden p-3 space-y-3">
+                {filtered.map((n) => (
+                  <div key={n.id} className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/[0.04] p-3 space-y-3">
+                    {n.photo_url ? (
+                      <button
+                        type="button"
+                        onClick={() => setLightbox({ url: n.photo_url, name: displayName(n) })}
+                        className="block w-full"
+                      >
+                        <img src={n.photo_url} alt={displayName(n)} className="w-full h-48 rounded-xl object-cover border border-white/10" />
+                      </button>
+                    ) : (
+                      <div className="w-full h-36 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/20">
+                        <ImageOff className="w-8 h-8" />
+                      </div>
+                    )}
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
+                        <StatusBadge status={n.status} />
+                      </div>
+                      <h3 className="font-heading font-bold text-white text-lg leading-tight">{displayName(n)}</h3>
+                      <p className="text-sm text-primary-foreground/60">{n.school_name || "—"}</p>
+                      {n.student_name && <p className="text-xs text-primary-foreground/45">Student: {n.student_name}</p>}
+                      <p className="text-sm text-primary-foreground/70">{n.phone || "—"}</p>
+                      <p className="text-xs text-primary-foreground/40">{n.created_at ? formatDateIn(n.created_at) : "—"}</p>
+                      {n.award_category && (
+                        <Badge variant="outline" className="text-[10px] border-primary-foreground/20 text-primary-foreground/60">{n.award_category.replace(" Award", "")}</Badge>
+                      )}
+                    </div>
+                    <NominationActions
+                      n={n}
+                      updating={updating}
+                      stacked
+                      onView={() => setViewingNoms([n])}
+                      onEdit={() => setEditingNom(n)}
+                      onStatus={updateStatus}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="hidden lg:block overflow-x-auto">
                 <table className="w-full min-w-[700px]">
                   <thead>
                     <tr className="border-b border-primary-foreground/10">
@@ -1062,51 +1166,13 @@ const AdminPage = () => {
                         <td className="px-4 sm:px-5 py-3"><StatusBadge status={n.status} /></td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/40 whitespace-nowrap">{new Date(n.created_at).toLocaleDateString("en-IN")}</td>
                         <td className="px-3 py-3">
-                          <div className="flex flex-wrap items-center gap-1">
-                            <button onClick={() => setViewingNoms([n])}
-                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all text-[11px] font-semibold">
-                              <Eye className="w-3 h-3" /> View
-                            </button>
-                            {/* Edit */}
-                            <button onClick={() => setEditingNom(n)}
-                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all text-[11px] font-semibold">
-                              <Pencil className="w-3 h-3" /> Edit
-                            </button>
-                            {/* Shortlist — adds to voting page */}
-                            {n.status !== "shortlisted" && n.status !== "winner" && (
-                              <button onClick={() => updateStatus(n.id, "shortlisted")} disabled={updating?.startsWith(n.id) ?? false}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 transition-all text-[11px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-                                title="Add to voting page">
-                                {updating === n.id+"shortlisted" ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                                Shortlist
-                              </button>
-                            )}
-                            {/* Revoke — removes from voting, back to pending */}
-                            {n.status === "shortlisted" && (
-                              <button onClick={() => updateStatus(n.id, "pending")} disabled={updating?.startsWith(n.id) ?? false}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-orange-500/15 hover:bg-orange-500/25 text-orange-400 transition-all text-[11px] font-semibold disabled:opacity-40"
-                                title="Remove from voting page">
-                                {updating === n.id+"pending" ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-                                Revoke
-                              </button>
-                            )}
-                            {/* Winner */}
-                            {n.status !== "winner" && (
-                              <button onClick={() => updateStatus(n.id, "winner")} disabled={updating?.startsWith(n.id) ?? false}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-green-500/15 hover:bg-green-500/25 text-green-400 transition-all text-[11px] font-semibold disabled:opacity-40">
-                                {updating === n.id+"winner" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Award className="w-3 h-3" />}
-                                Winner
-                              </button>
-                            )}
-                            {/* Reject */}
-                            {n.status !== "rejected" && n.status !== "winner" && (
-                              <button onClick={() => updateStatus(n.id, "rejected")} disabled={updating?.startsWith(n.id) ?? false}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/15 hover:bg-red-500/25 text-red-400 transition-all text-[11px] font-semibold disabled:opacity-40">
-                                {updating === n.id+"rejected" ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-                                Reject
-                              </button>
-                            )}
-                          </div>
+                          <NominationActions
+                            n={n}
+                            updating={updating}
+                            onView={() => setViewingNoms([n])}
+                            onEdit={() => setEditingNom(n)}
+                            onStatus={updateStatus}
+                          />
                         </td>
                       </motion.tr>
                     ))}
