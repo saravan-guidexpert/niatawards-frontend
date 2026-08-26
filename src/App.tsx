@@ -14,7 +14,6 @@ import Index from "./pages/Index.tsx";
 const NominatePage    = lazy(() => import("./pages/NominatePage.tsx"));
 const ThankYouPage    = lazy(() => import("./pages/ThankYouPage.tsx"));
 const VotePage        = lazy(() => import("./pages/VotePage.tsx"));
-const AnnouncementsPage = lazy(() => import("./pages/AnnouncementsPage.tsx"));
 const AdminPage       = lazy(() => import("./pages/AdminPage.tsx"));
 const AdminLoginPage  = lazy(() => import("./pages/AdminLoginPage.tsx"));
 const LoginPage       = lazy(() => import("./pages/LoginPage.tsx"));
@@ -47,7 +46,6 @@ const App = () => (
               <Route path="/nominate"      element={<NominatePage />} />
               <Route path="/thank-you"     element={<ThankYouPage />} />
               <Route path="/voteniatteachers"          element={<VotePage />} />
-              <Route path="/announcements" element={<AnnouncementsPage />} />
               <Route path="/admin-login"   element={<AdminLoginPage />} />
               <Route path="/admin"         element={<AdminPage />} />
               <Route path="*"             element={<NotFound />} />
