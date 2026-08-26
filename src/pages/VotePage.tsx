@@ -387,9 +387,17 @@ const VotePage = () => {
 
                     <div className="p-5">
                       <div className="flex items-start gap-3 mb-4 mt-1">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#8B1A1A] to-[#6B1212] flex items-center justify-center font-heading font-bold text-base text-white shadow-md flex-shrink-0">
-                          {initials}
-                        </div>
+                        {n.photo_url ? (
+                          <img
+                            src={n.photo_url}
+                            alt={name}
+                            className="w-12 h-12 rounded-xl object-cover shadow-md flex-shrink-0 border border-white/10"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#8B1A1A] to-[#6B1212] flex items-center justify-center font-heading font-bold text-base text-white shadow-md flex-shrink-0">
+                            {initials}
+                          </div>
+                        )}
                         <div className="min-w-0 flex-1 pt-0.5">
                           <h3 className="font-heading font-bold text-white text-sm sm:text-base leading-tight truncate">{name}</h3>
                           <p className="text-white/45 text-xs truncate mt-0.5">{n.school_name || "—"}</p>

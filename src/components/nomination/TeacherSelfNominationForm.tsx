@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { createNomination } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import TeacherPhotoUpload from "@/components/nomination/TeacherPhotoUpload";
 
 const classesTeaching = [
   "Primary (Class 1–5)",
@@ -35,6 +36,8 @@ const TeacherSelfNominationForm = () => {
     impactStory: "",
     phone: user?.phone || "",
   });
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const set = (key: string, val: string) => setForm((p) => {
     const next = { ...p, [key]: val };
@@ -65,6 +68,11 @@ const TeacherSelfNominationForm = () => {
     }
     setLoading(true);
     try {
+      if (photoBusy) {
+        toast({ title: "Please wait for the photo to finish uploading", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
       await createNomination({
         type: "teacher",
         full_name: form.fullName.trim(),
@@ -74,6 +82,7 @@ const TeacherSelfNominationForm = () => {
         student_class: form.classesTeaching,
         impact_story: form.impactStory.trim(),
         phone: form.phone.trim(),
+        photo_url: photoUrl || null,
       });
       localStorage.removeItem("niat_teacher_draft");
       navigate("/thank-you");
@@ -159,8 +168,10 @@ const TeacherSelfNominationForm = () => {
           </p>
         </div>
 
+        <TeacherPhotoUpload value={photoUrl} onChange={setPhotoUrl} variant="light" onBusyChange={setPhotoBusy} />
+
         <Button id="btn-teacher-form-submit" type="submit" variant="hero" size="lg"
-          className="w-full h-14 rounded-xl text-base font-bold" disabled={loading}>
+          className="w-full h-14 rounded-xl text-base font-bold" disabled={loading || photoBusy}>
           {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit Application"}
         </Button>
 

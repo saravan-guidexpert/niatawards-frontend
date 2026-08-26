@@ -5,6 +5,7 @@ import { ChevronDown, X, CheckCircle2, Loader2, ArrowRight, User } from "lucide-
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { createNomination } from "@/lib/api";
+import TeacherPhotoUpload from "@/components/nomination/TeacherPhotoUpload";
 
 declare function gtag(...args: any[]): void;
 const track = (event: string, params?: Record<string, any>) => { try { gtag("event", event, params); } catch {} };
@@ -96,6 +97,8 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
   const [roleOpen, setRoleOpen] = useState(false);
   const [formStep, setFormStep] = useState<1 | 2>(1);
   const [loading, setLoading]   = useState(false);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const iStyle = { background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff" };
   const iCls   = "w-full h-10 rounded-lg px-3 text-[13px] font-medium text-white placeholder:text-white/35 focus:outline-none transition-all";
@@ -149,6 +152,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
     e.preventDefault();
     setLoading(true);
     try {
+      if (photoBusy) throw new Error("Please wait for the photo to finish uploading");
       if (role === "student") {
         if (!sf.specialThing.trim()) throw new Error("Please fill in what's special about this teacher");
         if (!sf.impactStory.trim()) throw new Error("Please describe their impact");
@@ -164,6 +168,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
           subject: sf.teachingSubject.trim() || null,
           impact_story: sf.impactStory.trim() || null,
           board: sf.awardsRecognition.trim() || null,
+          photo_url: photoUrl || null,
         });
       } else {
         if (!tf.impactStory.trim()) throw new Error("Please share your impact story");
@@ -177,6 +182,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
           impact_story: tf.impactStory.trim(),
           phone: tf.phone.trim(),
           award_category: "General Nomination",
+          photo_url: photoUrl || null,
         });
       }
       track("nomination_submitted", { role });
@@ -312,12 +318,14 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
                 <FormTextarea label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." required rows={3} />
                 <input style={iStyle} className={iCls} placeholder="Awards / Recognition (Optional)" value={sf.awardsRecognition} onChange={e => setSF("awardsRecognition", e.target.value)} />
                 <input style={iStyle} className={iCls} placeholder="Teacher's LinkedIn / Social Media (Optional)" value={sf.teacherSocial} onChange={e => setSF("teacherSocial", e.target.value)} />
+                <TeacherPhotoUpload value={photoUrl} onChange={setPhotoUrl} variant="dark" onBusyChange={setPhotoBusy} />
               </div>
             )}
 
             {role === "teacher" && (
               <div className="space-y-2">
                 <FormTextarea label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
+                <TeacherPhotoUpload value={photoUrl} onChange={setPhotoUrl} variant="dark" onBusyChange={setPhotoBusy} />
               </div>
             )}
 
@@ -327,7 +335,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
                 style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <ChevronDown className="w-3.5 h-3.5 rotate-90" /> Back
               </button>
-              <button type="submit" disabled={loading}
+              <button type="submit" disabled={loading || photoBusy}
                 className="flex-1 h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 disabled:opacity-60"
                 style={{ background: "linear-gradient(135deg,#9B2020,#7A1515)", color: "#fff", boxShadow: "0 4px 16px rgba(107,18,18,0.5)" }}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-3.5 h-3.5" /> Submit Nomination</>}

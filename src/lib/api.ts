@@ -64,6 +64,31 @@ export const createNomination = async (payload: Record<string, unknown>) => {
   return data;
 };
 
+export const uploadNominationPhoto = async (file: File) => {
+  const body = new FormData();
+  body.append("photo", file);
+  const res = await fetch(`${API_URL}/api/uploads/photo`, {
+    method: "POST",
+    body,
+  });
+  const contentType = res.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
+    ? await res.json().catch(() => ({}))
+    : {};
+  if (!contentType.includes("application/json") || !res.ok) {
+    throw new ApiError(
+      (data && typeof data === "object" && "error" in data && String(data.error)) ||
+        (res.ok ? "Could not upload the photo. Please try again." : `Request failed (${res.status})`)
+    );
+  }
+  const photoUrl =
+    data && typeof data === "object" && "photo_url" in data ? String(data.photo_url) : "";
+  if (!photoUrl) {
+    throw new ApiError("Photo upload did not return a URL. Please try again.");
+  }
+  return photoUrl;
+};
+
 export const getNominations = async (status = "shortlisted,winner") =>
   asArray(await request(`/api/nominations?status=${encodeURIComponent(status)}`));
 

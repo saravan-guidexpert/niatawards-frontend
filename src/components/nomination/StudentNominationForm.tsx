@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { createNomination } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import TeacherPhotoUpload from "@/components/nomination/TeacherPhotoUpload";
 
 const awardCategories = [
   "Student Transformation Award",
@@ -54,6 +55,8 @@ const StudentNominationForm = () => {
     awardsRecognition: "",
     teacherSocial:   "",
   });
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const [searchParams] = useSearchParams();
 
@@ -99,6 +102,11 @@ const StudentNominationForm = () => {
 
     setLoading(true);
     try {
+      if (photoBusy) {
+        toast({ title: "Please wait for the photo to finish uploading", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
       await createNomination({
         type:              "student",
         student_name:      form.studentName.trim(),
@@ -111,6 +119,7 @@ const StudentNominationForm = () => {
         subject:           form.teachingSubject.trim() || null,
         impact_story:      form.impactStory.trim() || null,
         board:             form.awardsRecognition.trim() || null,
+        photo_url:         photoUrl || null,
       });
       localStorage.removeItem("niat_nomination_draft");
       navigate("/thank-you");
@@ -280,8 +289,10 @@ const StudentNominationForm = () => {
             placeholder="https://linkedin.com/in/teacher-name or Instagram/Twitter link" />
         </div>
 
+        <TeacherPhotoUpload value={photoUrl} onChange={setPhotoUrl} variant="light" onBusyChange={setPhotoBusy} />
+
         <Button id="btn-student-form-submit" type="submit" variant="hero" size="lg"
-          className="w-full h-14 rounded-xl text-base font-bold" disabled={loading}>
+          className="w-full h-14 rounded-xl text-base font-bold" disabled={loading || photoBusy}>
           {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit Nomination"}
         </Button>
 

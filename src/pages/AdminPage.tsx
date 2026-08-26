@@ -129,6 +129,17 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
             <span className="text-xs text-white/30">{new Date(nomination.created_at).toLocaleString("en-IN")}</span>
           </div>
 
+          {form.photo_url && (
+            <div>
+              <Label className="text-white/60 text-xs mb-1.5 block">Teacher photo</Label>
+              <img
+                src={form.photo_url}
+                alt={form.teacher_name || form.full_name || "Teacher"}
+                className="h-28 w-28 rounded-xl object-cover border border-white/10"
+              />
+            </div>
+          )}
+
           {/* Teacher / Applicant Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {nomination.type === "student" ? (
@@ -741,7 +752,12 @@ const AdminPage = () => {
                       <Star className="w-4 h-4 text-secondary" />
                       <span className="text-sm font-semibold text-primary-foreground">Latest Submission</span>
                     </div>
-                    <p className="text-sm text-primary-foreground/60">{nominations[0].teacher_name || nominations[0].full_name || "—"}</p>
+                    <p className="text-sm text-primary-foreground/60 flex items-center gap-2">
+                      {nominations[0].photo_url ? (
+                        <img src={nominations[0].photo_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
+                      ) : null}
+                      {nominations[0].teacher_name || nominations[0].full_name || "—"}
+                    </p>
                     <p className="text-xs text-primary-foreground/40">{nominations[0].school_name || ""} · {new Date(nominations[0].created_at).toLocaleDateString("en-IN")}</p>
                   </div>
                 )}
@@ -801,7 +817,14 @@ const AdminPage = () => {
                         <td className="px-4 sm:px-5 py-3">
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
                         </td>
-                        <td className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-medium text-primary-foreground max-w-[130px] truncate">{n.teacher_name || n.full_name || "—"}</td>
+                        <td className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-medium text-primary-foreground max-w-[130px]">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {n.photo_url ? (
+                              <img src={n.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-white/10" />
+                            ) : null}
+                            <span className="truncate">{n.teacher_name || n.full_name || "—"}</span>
+                          </div>
+                        </td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[100px] truncate">{n.student_name || "—"}</td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[120px] truncate">{n.school_name || "—"}</td>
                         <td className="px-4 sm:px-5 py-3">
