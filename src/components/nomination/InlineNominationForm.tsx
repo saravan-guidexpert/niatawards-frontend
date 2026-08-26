@@ -5,6 +5,7 @@ import { ChevronDown, X, CheckCircle2, Loader2, ArrowRight, User } from "lucide-
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { createNomination } from "@/lib/api";
+import { trackFunnel } from "@/lib/funnel";
 import TeacherPhotoUpload from "@/components/nomination/TeacherPhotoUpload";
 
 declare function gtag(...args: any[]): void;
@@ -144,6 +145,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
       if (!tf.classesTeaching) { toast({ title: "Please select which class you teach", variant: "destructive" }); return; }
     }
     track("form_step2_opened", { role });
+    if (phone) trackFunnel("form_step1", phone, role);
     setFormStep(2);
   };
 

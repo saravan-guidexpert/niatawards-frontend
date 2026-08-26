@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { apiSendOtp, apiVerifyOtp } from "@/lib/api";
+import { trackFunnel } from "@/lib/funnel";
 
 interface User {
   phone: string;
@@ -50,12 +51,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Master number — skip SMS API entirely, go straight to OTP step
     if (cleaned === MASTER_PHONE) {
       setPendingPhone(cleaned);
+      trackFunnel("otp_requested", cleaned);
       return { success: true };
     }
 
     try {
       await apiSendOtp(cleaned);
       setPendingPhone(cleaned);
+      trackFunnel("otp_requested", cleaned);
       return { success: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to send OTP";
@@ -69,6 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Master OTP — bypass API verification
     if (otp === MASTER_OTP) {
       setUser({ phone: pendingPhone, role: "student", name: name?.trim() || undefined });
+      trackFunnel("otp_verified", pendingPhone);
       setPendingPhone(null);
       return true;
     }
@@ -76,6 +80,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await apiVerifyOtp(pendingPhone, otp);
       setUser({ phone: pendingPhone, role: "student", name: name?.trim() || undefined });
+      trackFunnel("otp_verified", pendingPhone);
       setPendingPhone(null);
       return true;
     } catch {

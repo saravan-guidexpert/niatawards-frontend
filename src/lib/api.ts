@@ -94,6 +94,31 @@ export const uploadNominationPhoto = async (file: File) => {
 export const adminGetNominations = async () =>
   asArray(await request("/api/admin/nominations", { headers: adminHeaders() }));
 
+export type FunnelStage = {
+  id: "otp_requested" | "otp_verified" | "form_step1" | "submitted" | "shortlisted" | "winners";
+  label: string;
+  hint: string;
+  count: number;
+};
+
+export type FunnelStats = {
+  stages: FunnelStage[];
+  extras: {
+    withPhoto: number;
+    pending: number;
+    rejected: number;
+    students: number;
+    teachers: number;
+    submitted: number;
+  };
+};
+
+export const adminGetFunnel = (date?: string) =>
+  request<FunnelStats>(
+    `/api/admin/funnel${date ? `?date=${encodeURIComponent(date)}` : ""}`,
+    { headers: adminHeaders() }
+  );
+
 export const adminUpdateNomination = (id: string, payload: Record<string, unknown>) =>
   request(`/api/admin/nominations/${encodeURIComponent(id)}`, {
     method: "PATCH",

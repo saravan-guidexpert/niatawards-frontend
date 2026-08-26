@@ -22,6 +22,7 @@ import { adminGetNominations, adminLogoutApi, adminUpdateNomination } from "@/li
 import CampaignsPanel from "@/components/admin/CampaignsPanel";
 import DigitalMarketingPanel from "@/components/admin/DigitalMarketingPanel";
 import AccessManagementPanel from "@/components/admin/AccessManagementPanel";
+import FunnelAnalytics from "@/components/admin/FunnelAnalytics";
 import {
   allowedAdminTabs,
   firstAllowedTab,
@@ -772,6 +773,14 @@ const AdminPage = () => {
           <AccessManagementPanel />
         ) : activeTab === "nominations" ? (
           <>
+            <FunnelAnalytics
+              dateKey={dateFilter ? istDayKey(dateFilter) : undefined}
+              onStageClick={(stageId) => {
+                if (stageId === "submitted") setStatusFilter("All");
+                if (stageId === "shortlisted") setStatusFilter("shortlisted");
+                if (stageId === "winners") setStatusFilter("winner");
+              }}
+            />
             {/* Shortlisted → voting banner */}
             {shortlisted === 0 && pending > 0 && (
               <div className="flex items-center gap-3 p-4 rounded-xl mb-5 border border-amber-500/30 bg-amber-500/10">
