@@ -58,7 +58,6 @@ export function captureUtmParams(): void {
   if (Object.keys(found).length > 0) {
     const serialized = JSON.stringify(found);
     safeSet(sessionStorage, serialized);
-    safeSet(localStorage, serialized);
 
     if (typeof window.gtag === "function") {
       window.gtag("event", "utm_capture", found);
@@ -113,9 +112,9 @@ function pingUtmHit(params: UtmParams): void {
     });
 }
 
-/** Get the currently stored UTM params (session first, then persisted). */
+/** Get the currently stored UTM params for this browser session (last-touch). */
 export function getUtmParams(): UtmParams {
-  const raw = safeGet(sessionStorage) ?? safeGet(localStorage);
+  const raw = safeGet(sessionStorage);
   if (!raw) return {};
   try {
     return JSON.parse(raw) as UtmParams;

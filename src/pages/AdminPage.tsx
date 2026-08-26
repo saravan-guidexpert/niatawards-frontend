@@ -5,8 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Award, Users, TrendingUp, Download, Search,
   CheckCircle2, XCircle, Eye, BarChart3, ArrowLeft, Star,
-  Loader2, RefreshCw, LogOut, Pencil, X, Save, ThumbsUp, Trophy, Medal,
-  Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2
+  Loader2, RefreshCw, LogOut, Pencil, X, Save,
+  Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2, Target, Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,9 +17,19 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { isAdminLoggedIn, adminLogout } from "./AdminLoginPage";
-import { adminGetNominations, adminGetVotes, adminUpdateNomination } from "@/lib/api";
+import { adminLogout, isAdminLoggedIn } from "./AdminLoginPage";
+import { adminGetNominations, adminLogoutApi, adminUpdateNomination } from "@/lib/api";
 import CampaignsPanel from "@/components/admin/CampaignsPanel";
+import DigitalMarketingPanel from "@/components/admin/DigitalMarketingPanel";
+import AccessManagementPanel from "@/components/admin/AccessManagementPanel";
+import {
+  allowedAdminTabs,
+  firstAllowedTab,
+  getAdminUser,
+  hasAdminPermission,
+  isSuperAdmin,
+  type PanelPermission,
+} from "@/lib/adminSession";
 
 const awardCategories = [
   "Student Transformation Award",
@@ -506,207 +516,16 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
 };
 
 
-// ── Votes Panel Component ──
-const VotesPanel = ({ votes, nominations }: { votes: any[]; nominations: any[] }) => {
-  const [search, setSearch] = useState("");
 
-  // Build leaderboard: group votes by nomination
-  const countMap: Record<string, { id: string; name: string; school: string; category: string; votes: number; voters: string[] }> = {};
-  votes.forEach((v: any) => {
-    const nom = v.nominations;
-    const name = nom?.teacher_name || nom?.full_name || "Unknown";
-    if (!countMap[v.nomination_id]) {
-      countMap[v.nomination_id] = { id: v.nomination_id, name, school: nom?.school_name || "", category: nom?.award_category || "", votes: 0, voters: [] };
-    }
-    countMap[v.nomination_id].votes++;
-    countMap[v.nomination_id].voters.push(v.voter_phone);
-  });
-
-  const leaderboard = Object.values(countMap).sort((a, b) => b.votes - a.votes);
-  const maxVotes = leaderboard[0]?.votes || 1;
-  const totalVotes = votes.length;
-  const uniqueVoters = new Set(votes.map((v: any) => v.voter_phone)).size;
-
-  // Recent votes filtered
-  const filteredVotes = votes.filter((v: any) => {
-    const nom = v.nominations;
-    const name = (nom?.teacher_name || nom?.full_name || "").toLowerCase();
-    return name.includes(search.toLowerCase()) || (v.voter_phone || "").includes(search);
-  });
-
-  const catColor: Record<string, string> = {
-    "Student Transformation Award":  "text-amber-400",
-    "Teaching Innovation Award":     "text-blue-400",
-    "Beyond Classroom Impact Award": "text-emerald-400",
-    "Future Readiness Award":        "text-purple-400",
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
-        {[
-          { label: "Total Votes", value: totalVotes, icon: ThumbsUp, color: "bg-secondary" },
-          { label: "Unique Voters", value: uniqueVoters, icon: Users, color: "bg-blue-600" },
-          { label: "Teachers Voted", value: leaderboard.length, icon: Trophy, color: "bg-amber-500" },
-        ].map((s, i) => (
-          <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
-            className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 p-4 sm:p-5">
-            <div className={`w-9 h-9 rounded-lg ${s.color} flex items-center justify-center mb-3`}>
-              <s.icon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-            </div>
-            <div className="text-2xl sm:text-3xl font-bold text-white font-heading">{s.value}</div>
-            <div className="text-[10px] sm:text-xs text-primary-foreground/40 mt-1">{s.label}</div>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-5 sm:gap-6">
-        {/* Leaderboard */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-          className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-primary-foreground/10 flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-amber-400" />
-            <h2 className="font-heading font-bold text-primary-foreground text-base">Leaderboard</h2>
-            <span className="ml-auto text-xs text-primary-foreground/30">{leaderboard.length} teachers</span>
-          </div>
-          {leaderboard.length === 0 ? (
-            <div className="py-12 text-center text-primary-foreground/30 text-sm">No votes yet</div>
-          ) : (
-            <div className="divide-y divide-primary-foreground/[0.04]">
-              {leaderboard.map((t, i) => (
-                <motion.div key={t.id} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 + i * 0.05 }}
-                  className="flex items-center gap-3 p-3 sm:p-4 hover:bg-primary-foreground/5 transition-colors">
-                  {/* Rank */}
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
-                    i === 0 ? "bg-amber-400/20 text-amber-400" :
-                    i === 1 ? "bg-slate-400/20 text-slate-300" :
-                    i === 2 ? "bg-orange-600/20 text-orange-500" :
-                              "bg-primary-foreground/5 text-primary-foreground/40"
-                  }`}>
-                    {i < 3 ? ["🥇","🥈","🥉"][i] : `#${i+1}`}
-                  </div>
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-primary-foreground truncate">{t.name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-xs text-primary-foreground/40 truncate max-w-[120px]">{t.school}</p>
-                      {t.category && <span className={`text-[10px] font-semibold ${catColor[t.category] || "text-white/40"}`}>{t.category.replace(" Award","")}</span>}
-                    </div>
-                    {/* Progress bar */}
-                    <div className="mt-1.5 h-1.5 rounded-full bg-primary-foreground/10 overflow-hidden w-full">
-                      <motion.div initial={{ width: 0 }} animate={{ width: `${Math.round((t.votes / maxVotes) * 100)}%` }}
-                        transition={{ duration: 0.8, delay: 0.2 + i * 0.05 }}
-                        className="h-full rounded-full bg-gradient-to-r from-secondary to-secondary/60" />
-                    </div>
-                  </div>
-                  {/* Vote count */}
-                  <div className="text-right flex-shrink-0">
-                    <div className="text-base font-bold text-white">{t.votes}</div>
-                    <div className="text-[10px] text-primary-foreground/30">{totalVotes > 0 ? Math.round((t.votes/totalVotes)*100) : 0}%</div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </motion.div>
-
-        {/* Recent votes log */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-          className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-primary-foreground/10">
-            <div className="flex items-center gap-2 mb-3">
-              <Medal className="w-4 h-4 text-blue-400" />
-              <h2 className="font-heading font-bold text-primary-foreground text-base">Recent Votes</h2>
-              <span className="ml-auto text-xs text-primary-foreground/30">{filteredVotes.length} records</span>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary-foreground/30" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search by teacher or phone..."
-                className="w-full pl-9 pr-3 h-9 rounded-lg bg-primary-foreground/5 border border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/25 text-xs focus:outline-none focus:border-primary-foreground/20 transition-all" />
-            </div>
-          </div>
-          <div className="overflow-y-auto max-h-[360px]">
-            {filteredVotes.length === 0 ? (
-              <div className="py-12 text-center text-primary-foreground/30 text-sm">No votes yet</div>
-            ) : (
-              <table className="w-full">
-                <thead className="sticky top-0 bg-[#141414]">
-                  <tr className="border-b border-primary-foreground/10">
-                    {["Teacher", "Voter Phone", "Voter ID", "Date & Time"].map(h => (
-                      <th key={h} className="text-left text-[10px] font-semibold text-primary-foreground/30 uppercase tracking-wider px-4 py-2.5">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredVotes.map((v: any, i: number) => {
-                    const nom = v.nominations;
-                    const name = nom?.teacher_name || nom?.full_name || "—";
-                    return (
-                      <tr key={v.id || i} className="border-b border-primary-foreground/[0.04] hover:bg-primary-foreground/5 transition-colors">
-                        <td className="px-4 py-2.5 text-xs font-medium text-primary-foreground max-w-[120px] truncate">{name}</td>
-                        <td className="px-4 py-2.5 text-xs text-primary-foreground/50">{v.voter_phone || "—"}</td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-secondary/70">{v.voter_id || "—"}</td>
-                        <td className="px-4 py-2.5 text-xs text-primary-foreground/40 whitespace-nowrap">
-                          {v.created_at ? new Date(v.created_at).toLocaleString("en-IN", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Category breakdown */}
-      {leaderboard.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
-          className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 p-5">
-          <div className="flex items-center gap-2 mb-5">
-            <BarChart3 className="w-4 h-4 text-secondary" />
-            <h2 className="font-heading font-bold text-primary-foreground text-base">Votes by Category</h2>
-          </div>
-          <div className="space-y-4">
-            {[
-              { cat: "Student Transformation Award", color: "bg-amber-400",   text: "text-amber-400" },
-              { cat: "Teaching Innovation Award",    color: "bg-blue-400",    text: "text-blue-400" },
-              { cat: "Beyond Classroom Impact Award",color: "bg-emerald-400", text: "text-emerald-400" },
-              { cat: "Future Readiness Award",       color: "bg-purple-400",  text: "text-purple-400" },
-            ].map(({ cat, color, text }) => {
-              const catVotes = votes.filter((v: any) => v.nominations?.award_category === cat).length;
-              const pct = totalVotes > 0 ? Math.round((catVotes / totalVotes) * 100) : 0;
-              return (
-                <div key={cat}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className={`text-xs font-semibold ${text}`}>{cat.replace(" Award", "")}</span>
-                    <span className="text-xs text-primary-foreground/60">{catVotes} votes ({pct}%)</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-primary-foreground/10 overflow-hidden">
-                    <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }}
-                      transition={{ duration: 1, ease: "easeOut" }}
-                      className={`h-full rounded-full ${color}`} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
-    </div>
-  );
-};
 
 // ── Main Admin Page ──
 const AdminPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [nominations, setNominations] = useState<any[]>([]);
-  const [votes, setVotes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<"nominations" | "votes" | "campaigns">("nominations");
+  const adminUser = getAdminUser();
+  const tabs = allowedAdminTabs(adminUser);
+  const [activeTab, setActiveTab] = useState<PanelPermission | "access">(firstAllowedTab(adminUser));
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -723,10 +542,19 @@ const AdminPage = () => {
   useEffect(() => {
     if (!isAdminLoggedIn()) {
       navigate("/admin-login");
+      return;
+    }
+    const allowed = allowedAdminTabs(getAdminUser());
+    if (!allowed.includes(activeTab)) {
+      setActiveTab(firstAllowedTab(getAdminUser()));
     }
   }, []);
 
-  const handleLogout = () => { adminLogout(); navigate("/admin-login"); };
+  const handleLogout = () => {
+    void adminLogoutApi().catch(() => undefined);
+    adminLogout();
+    navigate("/admin-login");
+  };
 
   const total = nominations.length;
   const pending = nominations.filter(n => n.status === "pending").length;
@@ -741,17 +569,19 @@ const AdminPage = () => {
   const fetchNominations = async () => {
     setLoading(true);
     try {
-      const noms = await adminGetNominations();
-      setNominations(noms);
+      const canLoadNominations =
+        isSuperAdmin() ||
+        hasAdminPermission("nominations") ||
+        hasAdminPermission("campaigns") ||
+        hasAdminPermission("digital");
 
-      const voteData = await adminGetVotes();
-      const nomMap: Record<string, any> = {};
-      noms.forEach(n => { nomMap[n.id] = n; });
-      setVotes(voteData.map(v => ({
-        ...v,
-        nominations: nomMap[v.nomination_id] || null,
-      })));
+      const noms = canLoadNominations ? await adminGetNominations() : [];
+      setNominations(noms);
     } catch (err: any) {
+      if (!isAdminLoggedIn()) {
+        navigate("/admin-login");
+        return;
+      }
       toast({ title: "Failed to load", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
@@ -795,29 +625,6 @@ const AdminPage = () => {
 
   const categories = ["All", ...Array.from(new Set(nominations.map(n => n.award_category).filter(Boolean)))];
   const utmSources = ["All", ...Array.from(new Set(nominations.map(utmSourceKey)))];
-
-  const exportVotesCSV = () => {
-    // Build vote counts per teacher
-    const countMap: Record<string, { name: string; school: string; category: string; votes: number }> = {};
-    votes.forEach((v: any) => {
-      const nom = v.nominations;
-      const name = nom?.teacher_name || nom?.full_name || v.nomination_id;
-      if (!countMap[v.nomination_id]) {
-        countMap[v.nomination_id] = { name, school: nom?.school_name || "", category: nom?.award_category || "", votes: 0 };
-      }
-      countMap[v.nomination_id].votes++;
-    });
-    const sorted = Object.values(countMap).sort((a, b) => b.votes - a.votes);
-    const rows = [
-      ["Rank", "Teacher Name", "School", "Award Category", "Total Votes"],
-      ...sorted.map((r, i) => [i + 1, r.name, r.school, r.category, r.votes]),
-    ];
-    const csv = rows.map(r => r.map(v => `"${v || ""}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "votes.csv"; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
 
   const exportCSV = () => {
     const rows = [
@@ -904,16 +711,22 @@ const AdminPage = () => {
             </div>
             <div className="min-w-0">
               <h1 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">Admin Dashboard</h1>
-              <p className="hidden sm:block text-xs text-primary-foreground/40">Future-Ready Educator Awards 2026</p>
+              <p className="hidden sm:block text-xs text-primary-foreground/40">
+                {adminUser?.name || adminUser?.username
+                  ? `Signed in as ${adminUser.name || adminUser.username}${adminUser.role === "super_admin" ? " · Super admin" : ""}`
+                  : "Future-Ready Educator Awards 2026"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
               <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
             </Button>
-            <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={activeTab === "votes" ? exportVotesCSV : exportCSV}>
-              <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">{activeTab === "votes" ? "Export Votes" : "Export CSV"}</span>
-            </Button>
+            {activeTab !== "access" && (
+              <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
+                <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span>
+              </Button>
+            )}
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={handleLogout}>
               <LogOut className="w-3.5 h-3.5" /><span className="hidden sm:inline">Logout</span>
             </Button>
@@ -923,25 +736,21 @@ const AdminPage = () => {
 
       {/* Tabs */}
       <div className="border-b border-primary-foreground/10 bg-gradient-dark">
-        <div className="container px-3 sm:px-4 flex">
+        <div className="container px-3 sm:px-4 flex overflow-x-auto">
           {[
-            { id: "nominations", label: "Nominations", icon: Users },
-            { id: "campaigns", label: "Campaigns", icon: Megaphone },
-            { id: "votes", label: "Votes", icon: ThumbsUp },
-          ].map(tab => (
+            { id: "nominations" as const, label: "Nominations", icon: Users },
+            { id: "campaigns" as const, label: "Influencer Tracking", icon: Megaphone },
+            { id: "digital" as const, label: "Digital Marketing", icon: Target },
+            { id: "access" as const, label: "Access", icon: Shield },
+          ].filter((tab) => tabs.includes(tab.id)).map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all ${
+              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
                 activeTab === tab.id
                   ? "border-secondary text-secondary"
                   : "border-transparent text-primary-foreground/40 hover:text-primary-foreground/70"
               }`}>
               <tab.icon className="w-4 h-4" />
               {tab.label}
-              {tab.id === "votes" && votes.length > 0 && (
-                <span className="ml-1 bg-secondary/20 text-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  {votes.length}
-                </span>
-              )}
               {tab.id === "campaigns" && nominations.filter(hasUtm).length > 0 && (
                 <span className="ml-1 bg-secondary/20 text-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
                   {nominations.filter(hasUtm).length}
@@ -954,11 +763,13 @@ const AdminPage = () => {
 
       {/* Content */}
       <div className="container py-6 sm:py-8 px-3 sm:px-4">
-        {loading ? (
+        {loading && activeTab !== "access" ? (
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-8 h-8 text-secondary animate-spin" />
             <span className="ml-3 text-primary-foreground/60">Loading...</span>
           </div>
+        ) : activeTab === "access" ? (
+          <AccessManagementPanel />
         ) : activeTab === "nominations" ? (
           <>
             {/* Shortlisted → voting banner */}
@@ -1269,9 +1080,13 @@ const AdminPage = () => {
             setViewingTitle(title);
             setViewingNoms(list);
           }} />
-        ) : (
-          <VotesPanel votes={votes} nominations={nominations} />
-        )}
+        ) : activeTab === "digital" ? (
+          <DigitalMarketingPanel nominations={nominations} onView={(noms, title) => {
+            const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
+            setViewingTitle(title);
+            setViewingNoms(list);
+          }} />
+        ) : null}
       </div>
     </div>
   );

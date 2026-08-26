@@ -1,7 +1,6 @@
 import { getUtmParams } from "./utm";
 import { API_URL } from "./apiBase";
-const ADMIN_SECRET =
-  (import.meta.env.VITE_ADMIN_SECRET || "").trim() || "niat_admin_2026_secret";
+import { clearAdminSession, getAdminToken, type AdminRole, type PanelPermission } from "./adminSession";
 
 export class ApiError extends Error {
   code?: string;
@@ -24,6 +23,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const data = contentType.includes("application/json")
     ? await res.json().catch(() => ({}))
     : {};
+  if (res.status === 401 && path.startsWith("/api/admin") && path !== "/api/admin/login") {
+    clearAdminSession();
+  }
   if (!contentType.includes("application/json") || !res.ok) {
     throw new ApiError(
       (data && typeof data === "object" && "error" in data && String(data.error)) ||
@@ -36,7 +38,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 const asArray = <T,>(data: unknown): T[] => (Array.isArray(data) ? data : []);
 
-const adminHeaders = () => ({ "x-admin-secret": ADMIN_SECRET });
+const adminHeaders = () => {
+  const token = getAdminToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 export const apiSendOtp = (phone: string) =>
   request<{ success: boolean }>("/api/otp/send", {
@@ -89,9 +94,6 @@ export const uploadNominationPhoto = async (file: File) => {
 export const adminGetNominations = async () =>
   asArray(await request("/api/admin/nominations", { headers: adminHeaders() }));
 
-export const adminGetVotes = async () =>
-  asArray(await request("/api/admin/votes", { headers: adminHeaders() }));
-
 export const adminUpdateNomination = (id: string, payload: Record<string, unknown>) =>
   request(`/api/admin/nominations/${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -124,4 +126,123 @@ export const adminCreatePromoLink = (payload: {
     method: "POST",
     headers: adminHeaders(),
     body: JSON.stringify(payload),
+  });
+
+export type DigitalCampaignLink = {
+  id: string;
+  created_at: string;
+  standard: string;
+  channel: string;
+  state: string;
+  language: string;
+  audience: string;
+  landing_diff: string;
+  creative_type: string;
+  creative: string;
+  ad_format: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  destination: string;
+  views: number;
+  last_click_at: string | null;
+};
+
+export const adminGetDigitalCampaignLinks = async () =>
+  asArray<DigitalCampaignLink>(
+    await request("/api/admin/digital-campaign-links", { headers: adminHeaders() })
+  );
+
+export const adminCreateDigitalCampaignLink = (payload: {
+  channel: string;
+  state: string;
+  language: string;
+  audience?: string;
+  landing_diff?: string;
+  creative_type: string;
+  creative?: string;
+  utm_medium: string;
+}) =>
+  request<DigitalCampaignLink>("/api/admin/digital-campaign-links", {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+export type AdminAccount = {
+  id: string;
+  created_at: string;
+  username: string;
+  name: string;
+  role: AdminRole;
+  permissions: PanelPermission[];
+  active: boolean;
+};
+
+export const adminLogin = (username: string, password: string) =>
+  request<{
+    token: string;
+    user: {
+      id: string;
+      username: string;
+      name: string;
+      role: AdminRole;
+      permissions: PanelPermission[];
+    };
+  }>("/api/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+
+export const adminLogoutApi = () =>
+  request<{ success: boolean }>("/api/admin/logout", {
+    method: "POST",
+    headers: adminHeaders(),
+  });
+
+export const adminGetMe = () =>
+  request<{
+    user: {
+      id: string;
+      username: string;
+      name: string;
+      role: AdminRole;
+      permissions: PanelPermission[];
+    };
+  }>("/api/admin/me", { headers: adminHeaders() });
+
+export const adminGetUsers = async () =>
+  asArray<AdminAccount>(await request("/api/admin/users", { headers: adminHeaders() }));
+
+export const adminCreateUser = (payload: {
+  username: string;
+  password: string;
+  name?: string;
+  permissions: PanelPermission[];
+}) =>
+  request<AdminAccount>("/api/admin/users", {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+export const adminUpdateUser = (
+  id: string,
+  payload: {
+    name?: string;
+    password?: string;
+    permissions?: PanelPermission[];
+    active?: boolean;
+  }
+) =>
+  request<AdminAccount>(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: adminHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+export const adminDeleteUser = (id: string) =>
+  request<{ success: boolean }>(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: adminHeaders(),
   });

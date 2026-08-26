@@ -1,25 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, Eye, EyeOff, Lock, User, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Lock, User, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { adminLogin } from "@/lib/api";
+import { setAdminSession } from "@/lib/adminSession";
 
-// TODO-SECURITY: Move these to Supabase Edge Function auth — never hardcode credentials in client JS
-// These are readable by anyone who inspects the JS bundle.
-const ADMIN_USERNAME = import.meta.env.VITE_ADMIN_USER || "NIAT_admin";
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASS || "Niat_teachers_2026";
-const SESSION_KEY = "niat_admin_session";
-
-export const isAdminLoggedIn = () => {
-  return sessionStorage.getItem(SESSION_KEY) === "true";
-};
-
-export const adminLogout = () => {
-  sessionStorage.removeItem(SESSION_KEY);
-};
+export { isAdminLoggedIn, clearAdminSession as adminLogout } from "@/lib/adminSession";
 
 const AdminLoginPage = () => {
   const navigate = useNavigate();
@@ -34,24 +24,26 @@ const AdminLoginPage = () => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate a slight delay for UX
-    await new Promise(r => setTimeout(r, 600));
-
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-      sessionStorage.setItem(SESSION_KEY, "true");
-      toast({ title: "Welcome, Admin!", description: "Redirecting to dashboard..." });
+    try {
+      const result = await adminLogin(username.trim(), password);
+      setAdminSession({ token: result.token, user: result.user });
+      toast({ title: "Welcome back", description: "Redirecting to dashboard..." });
       navigate("/admin");
-    } else {
+    } catch (err: any) {
       setShake(true);
       setTimeout(() => setShake(false), 500);
-      toast({ title: "Invalid credentials", description: "Please check your username and password.", variant: "destructive" });
+      toast({
+        title: "Invalid credentials",
+        description: err?.message || "Please check your username and password.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-gradient-dark flex items-center justify-center px-4">
-      {/* Background glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/15 rounded-full blur-3xl" />
         <div className="absolute bottom-0 left-0 w-72 h-72 bg-secondary/10 rounded-full blur-3xl" />
@@ -63,7 +55,6 @@ const AdminLoginPage = () => {
         transition={{ duration: 0.6 }}
         className="w-full max-w-md relative z-10"
       >
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#8B1A1A] to-[#6B1212] shadow-xl shadow-[#8B1A1A]/30 ring-1 ring-white/10 flex items-center justify-center mx-auto mb-4">
             <img src="/niat-logo.webp" alt="NIAT" className="w-11 h-11 object-contain" />
@@ -72,7 +63,6 @@ const AdminLoginPage = () => {
           <p className="text-primary-foreground/50 text-sm mt-1">NIAT Future-Ready Educator Awards 2026</p>
         </div>
 
-        {/* Card */}
         <motion.div
           animate={shake ? { x: [-10, 10, -8, 8, -4, 4, 0] } : {}}
           transition={{ duration: 0.4 }}
