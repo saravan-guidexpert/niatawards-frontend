@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CheckCircle, Share2, ArrowRight } from "lucide-react";
 import Navbar from "@/components/landing/Navbar";
@@ -6,7 +6,14 @@ import Footer from "@/components/landing/Footer";
 
 const ThankYouPage = () => {
   const navigate = useNavigate();
-  const shareText = encodeURIComponent("I just nominated my favourite teacher for NIAT Future-Ready Educator Awards 2026! 🏆 Nominate yours too: ");
+  const [params] = useSearchParams();
+  const isTeacher = params.get("type") === "teacher";
+
+  const shareText = encodeURIComponent(
+    isTeacher
+      ? "I just nominated myself for NIAT Guru Ratna Awards 2026! Nominate yours too: "
+      : "I just nominated my favourite teacher for NIAT Guru Ratna Awards 2026! Nominate yours too: "
+  );
   const shareUrl = encodeURIComponent("https://www.niatawards.in");
 
   return (
@@ -25,7 +32,9 @@ const ThankYouPage = () => {
             <p className="text-foreground/50 text-sm mb-8">Updates will be sent via WhatsApp to the phone number you provided.</p>
 
             <div className="bg-card rounded-2xl p-6 shadow-card border border-border/50 mb-6">
-              <p className="font-heading font-semibold text-foreground mb-4">Help your teacher get recognized! 🙏</p>
+              <p className="font-heading font-semibold text-foreground mb-4">
+                {isTeacher ? "Help more teachers get recognized! 🙏" : "Help your teacher get recognized! 🙏"}
+              </p>
               <a href={`https://wa.me/?text=${shareText}${shareUrl}`} target="_blank" rel="noopener noreferrer">
                 <button id="btn-thankyou-whatsapp-share" className="w-full h-12 rounded-xl bg-gradient-to-r from-[#9B2020] to-[#7A1515] text-white font-bold flex items-center justify-center gap-2">
                   <Share2 className="w-4 h-4" /> Share on WhatsApp
@@ -33,9 +42,9 @@ const ThankYouPage = () => {
               </a>
             </div>
 
-            <button id="btn-thankyou-nominate-another" onClick={() => navigate("/nominate")}
+            <button id="btn-thankyou-nominate-another" onClick={() => navigate(isTeacher ? "/nominate-teacher" : "/nominate-student")}
               className="w-full h-12 rounded-xl border border-border/50 text-foreground/65 font-medium flex items-center justify-center gap-2 hover:bg-muted transition-all">
-              Nominate Another Teacher <ArrowRight className="w-4 h-4" />
+              {isTeacher ? "Submit Another Nomination" : "Nominate Another Teacher"} <ArrowRight className="w-4 h-4" />
             </button>
           </motion.div>
         </div>

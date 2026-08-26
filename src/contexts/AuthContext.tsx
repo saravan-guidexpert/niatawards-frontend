@@ -90,8 +90,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (user) setUser(prev => prev ? { ...prev, name: name.trim() } : prev);
   };
 
-  // FIX: combined setter used by LoginDialog to avoid React batching issues
-  // where setUserRole + setUserName sequential calls overwrite each other
   const logout = () => { setUser(null); setPendingPhone(null); };
 
   return (

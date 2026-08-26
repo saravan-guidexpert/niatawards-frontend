@@ -26,7 +26,7 @@ const Footer = () => (
           <div>
             <p className="text-[11px] font-semibold text-white/25 uppercase tracking-widest mb-3">Navigate</p>
             <div className="flex flex-col gap-3">
-              {[{ label: "Home", to: "/" }, { label: "Nominate", to: "/nominate" }].map(l => (
+              {[{ label: "Home", to: "/" }, { label: "Student nomination", to: "/nominate-student" }, { label: "Teacher nomination", to: "/nominate-teacher" }].map(l => (
                 <Link key={l.to} to={l.to} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="text-[14px] text-white/45 hover:text-white/80 transition-colors min-h-[44px] flex items-center">{l.label}</Link>
               ))}
             </div>

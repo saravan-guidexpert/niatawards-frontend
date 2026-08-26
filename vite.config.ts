@@ -9,9 +9,8 @@ export default defineConfig(({ mode }) => ({
     hmr: { overlay: false },
     proxy: {
       "/api": {
-        target: "https://niatawards-backend.vercel.app",
+        target: "http://localhost:5000",
         changeOrigin: true,
-        secure: true,
       },
     },
   },

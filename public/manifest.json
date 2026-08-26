@@ -19,14 +19,7 @@
       "name": "Nominate a Teacher",
       "short_name": "Nominate",
       "description": "Submit a teacher nomination",
-      "url": "/nominate",
-      "icons": [{ "src": "/niat-logo.png", "sizes": "96x96" }]
-    },
-    {
-      "name": "Vote for Teachers",
-      "short_name": "Vote",
-      "description": "Vote for shortlisted teachers",
-      "url": "/vote",
+      "url": "/nominate-student",
       "icons": [{ "src": "/niat-logo.png", "sizes": "96x96" }]
     }
   ]

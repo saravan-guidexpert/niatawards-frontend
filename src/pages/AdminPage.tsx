@@ -6,7 +6,7 @@ import {
   Award, Users, TrendingUp, Download, Search,
   CheckCircle2, XCircle, Eye, BarChart3, ArrowLeft, Star,
   Loader2, RefreshCw, LogOut, Pencil, X, Save, ThumbsUp, Trophy, Medal,
-  Calendar as CalendarIcon, Copy, ImageOff
+  Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast";
 import { isAdminLoggedIn, adminLogout } from "./AdminLoginPage";
 import { adminGetNominations, adminGetVotes, adminUpdateNomination } from "@/lib/api";
+import CampaignsPanel from "@/components/admin/CampaignsPanel";
 
 const awardCategories = [
   "Student Transformation Award",
@@ -42,6 +43,7 @@ const formatDateIn = (value: string) => new Date(value).toLocaleDateString("en-I
 const COPY_HEADERS = [
   "Type", "Teacher/Applicant", "Student", "School", "Category", "Class",
   "Phone", "Status", "Date", "Photo URL", "Special thing", "Impact story",
+  "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content",
 ];
 
 const nominationRow = (n: any) => [
@@ -57,11 +59,56 @@ const nominationRow = (n: any) => [
   n.photo_url || "",
   n.special_thing || "",
   n.impact_story || "",
+  n.utm_source || "",
+  n.utm_medium || "",
+  n.utm_campaign || "",
+  n.utm_term || "",
+  n.utm_content || "",
 ];
+
+const hasUtm = (n: any) =>
+  Boolean(n?.utm_source || n?.utm_medium || n?.utm_campaign || n?.utm_term || n?.utm_content);
+
+const utmSourceKey = (n: any) => (String(n?.utm_source || "").trim() || "direct");
+
+const prettyUtm = (value: string) => {
+  const v = (value || "").trim();
+  if (!v || v.toLowerCase() === "direct") return "Direct / Organic";
+  const map: Record<string, string> = {
+    facebook: "Facebook", fb: "Facebook", instagram: "Instagram", ig: "Instagram",
+    google: "Google", youtube: "YouTube", whatsapp: "WhatsApp", twitter: "X / Twitter",
+    linkedin: "LinkedIn", email: "Email", sms: "SMS", cpc: "Paid (CPC)", organic: "Organic",
+    social: "Social", referral: "Referral",
+  };
+  return map[v.toLowerCase()] || v.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const utmChipClass = (source: string) => {
+  const k = source.toLowerCase();
+  if (k.includes("facebook") || k === "fb") return "bg-blue-500/15 text-blue-300 border-blue-500/25";
+  if (k.includes("instagram") || k === "ig") return "bg-pink-500/15 text-pink-300 border-pink-500/25";
+  if (k.includes("google")) return "bg-amber-500/15 text-amber-300 border-amber-500/25";
+  if (k.includes("whatsapp")) return "bg-emerald-500/15 text-emerald-300 border-emerald-500/25";
+  if (k.includes("youtube")) return "bg-red-500/15 text-red-300 border-red-500/25";
+  if (k === "direct") return "bg-white/8 text-white/45 border-white/12";
+  return "bg-secondary/15 text-secondary border-secondary/25";
+};
+
+const UtmChip = ({ n, className = "" }: { n: any; className?: string }) => {
+  const source = utmSourceKey(n);
+  const campaign = String(n?.utm_campaign || "").trim();
+  return (
+    <span className={`inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-full text-[10px] font-semibold border ${utmChipClass(source)} ${className}`}>
+      <Globe2 className="w-2.5 h-2.5 flex-shrink-0" />
+      <span className="truncate">{prettyUtm(source)}{campaign ? ` · ${campaign}` : ""}</span>
+    </span>
+  );
+};
 
 const flattenCell = (value: unknown) => String(value ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
 
 const StatusBadge = ({ status }: { status: string }) => {
+  const value = (status || "pending").toString();
   const styles: Record<string, string> = {
     shortlisted: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     winner: "bg-green-500/10 text-green-400 border-green-500/20",
@@ -69,8 +116,8 @@ const StatusBadge = ({ status }: { status: string }) => {
     rejected: "bg-destructive/10 text-destructive border-destructive/20",
   };
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${styles[status] || styles.pending}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${styles[value] || styles.pending}`}>
+      {value.charAt(0).toUpperCase() + value.slice(1)}
     </span>
   );
 };
@@ -106,14 +153,14 @@ const NominationActions = ({
       </button>
       {n.status !== "shortlisted" && n.status !== "winner" && (
         <button type="button" onClick={() => onStatus(n.id, "shortlisted")} disabled={disabled}
-          className={`${btn} bg-blue-500/15 hover:bg-blue-500/25 text-blue-400`} title="Add to voting page">
+          className={`${btn} bg-blue-500/15 hover:bg-blue-500/25 text-blue-400`} title="Shortlist this nomination">
           {busy("shortlisted") ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
           Shortlist
         </button>
       )}
       {n.status === "shortlisted" && (
         <button type="button" onClick={() => onStatus(n.id, "pending")} disabled={disabled}
-          className={`${btn} bg-orange-500/15 hover:bg-orange-500/25 text-orange-400`} title="Remove from voting page">
+          className={`${btn} bg-orange-500/15 hover:bg-orange-500/25 text-orange-400`} title="Remove from shortlist">
           {busy("pending") ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
           Revoke
         </button>
@@ -152,6 +199,7 @@ const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: 
         <div className="flex flex-wrap items-center gap-2">
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
           <StatusBadge status={n.status} />
+          <UtmChip n={n} />
         </div>
         <h3 className="font-heading font-bold text-white text-base">{displayName(n)}</h3>
         <p className="text-xs text-white/50">{n.school_name || "—"}</p>
@@ -164,6 +212,20 @@ const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: 
       <p className="text-white/40">Category: <span className="text-white/80">{n.award_category || "—"}</span></p>
       <p className="text-white/40">Class: <span className="text-white/80">{classOrExp(n) || "—"}</span></p>
       {n.subject && <p className="text-white/40 col-span-2">Subject: <span className="text-white/80">{n.subject}</span></p>}
+    </div>
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+      <p className="text-[10px] uppercase tracking-wider text-white/35 mb-2">Campaign attribution</p>
+      {hasUtm(n) ? (
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <p className="text-white/40">Source: <span className="text-white/85">{prettyUtm(n.utm_source || "direct")}</span></p>
+          <p className="text-white/40">Medium: <span className="text-white/85">{n.utm_medium ? prettyUtm(n.utm_medium) : "—"}</span></p>
+          <p className="text-white/40 col-span-2">Campaign: <span className="text-white/85">{n.utm_campaign || "—"}</span></p>
+          {n.utm_term && <p className="text-white/40">Term: <span className="text-white/85">{n.utm_term}</span></p>}
+          {n.utm_content && <p className="text-white/40">Content: <span className="text-white/85">{n.utm_content}</span></p>}
+        </div>
+      ) : (
+        <p className="text-xs text-white/40">Direct / organic — no UTM parameters on this nomination.</p>
+      )}
     </div>
     {n.special_thing && (
       <div>
@@ -187,32 +249,39 @@ const ViewNominationsModal = ({
   title: string;
   onClose: () => void;
   onPhotoClick?: (n: any) => void;
-}) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
+}) => {
+  const list = Array.isArray(nominations) ? nominations.filter(Boolean) : [];
+  return (
+  <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
     <motion.div
       initial={{ opacity: 0, scale: 0.96, y: 16 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       onClick={(e) => e.stopPropagation()}
-      className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90dvh] overflow-hidden flex flex-col"
+      className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90dvh] overflow-hidden flex flex-col text-white"
     >
       <div className="flex items-center justify-between p-3 sm:p-5 border-b border-white/10">
         <div>
-          <h2 className="font-heading text-base sm:text-lg font-bold text-white">{title}</h2>
-          <p className="text-xs text-white/40 mt-0.5">{nominations.length} nomination{nominations.length !== 1 ? "s" : ""}</p>
+          <h2 className="font-heading text-base sm:text-lg font-bold text-white">{title || "Nominations"}</h2>
+          <p className="text-xs text-white/40 mt-0.5">{list.length} nomination{list.length !== 1 ? "s" : ""}</p>
         </div>
-        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
+        <button type="button" onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
           <X className="w-5 h-5" />
         </button>
       </div>
       <div className="overflow-y-auto p-3 sm:p-5 space-y-4 pb-6 safe-bottom">
-        {nominations.map((n) => (
-          <NominationDetailCard key={n.id} n={n} onPhotoClick={onPhotoClick} />
-        ))}
+        {list.length === 0 ? (
+          <p className="text-sm text-white/50 py-10 text-center">No nominations attributed to this influencer yet.</p>
+        ) : (
+          list.map((n, i) => (
+            <NominationDetailCard key={n.id || n._id || i} n={n} onPhotoClick={onPhotoClick} />
+          ))
+        )}
       </div>
     </motion.div>
   </div>
-);
+  );
+};
 
 const PhotoLightbox = ({ photo, onClose }: { photo: { url: string; name: string }; onClose: () => void }) => {
   useEffect(() => {
@@ -637,16 +706,18 @@ const AdminPage = () => {
   const navigate = useNavigate();
   const [nominations, setNominations] = useState<any[]>([]);
   const [votes, setVotes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<"nominations" | "votes">("nominations");
+  const [activeTab, setActiveTab] = useState<"nominations" | "votes" | "campaigns">("nominations");
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
+  const [sourceFilter, setSourceFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
   const [editingNom, setEditingNom] = useState<any | null>(null);
   const [viewingNoms, setViewingNoms] = useState<any[] | null>(null);
+  const [viewingTitle, setViewingTitle] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -717,11 +788,13 @@ const AdminPage = () => {
     const matchCategory = categoryFilter === "All" || n.award_category === categoryFilter;
     const matchStatus = statusFilter === "All" || n.status === statusFilter;
     const matchType = typeFilter === "All" || n.type === typeFilter;
+    const matchSource = sourceFilter === "All" || utmSourceKey(n) === sourceFilter;
     const matchDate = !dateFilter || istDayKey(n.created_at) === istDayKey(dateFilter);
-    return matchSearch && matchCategory && matchStatus && matchType && matchDate;
+    return matchSearch && matchCategory && matchStatus && matchType && matchSource && matchDate;
   });
 
   const categories = ["All", ...Array.from(new Set(nominations.map(n => n.award_category).filter(Boolean)))];
+  const utmSources = ["All", ...Array.from(new Set(nominations.map(utmSourceKey)))];
 
   const exportVotesCSV = () => {
     // Build vote counts per teacher
@@ -803,11 +876,12 @@ const AdminPage = () => {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {viewingNoms && (
+        {viewingNoms !== null && (
           <ViewNominationsModal
+            key="view-nominations"
             nominations={viewingNoms}
-            title={viewingNoms.length === 1 ? "Nomination details" : "View all nominations"}
-            onClose={() => setViewingNoms(null)}
+            title={viewingTitle || (viewingNoms.length === 1 ? "Nomination details" : "View all nominations")}
+            onClose={() => { setViewingNoms(null); setViewingTitle(null); }}
             onPhotoClick={(n) => n.photo_url && setLightbox({ url: n.photo_url, name: displayName(n) })}
           />
         )}
@@ -852,6 +926,7 @@ const AdminPage = () => {
         <div className="container px-3 sm:px-4 flex">
           {[
             { id: "nominations", label: "Nominations", icon: Users },
+            { id: "campaigns", label: "Campaigns", icon: Megaphone },
             { id: "votes", label: "Votes", icon: ThumbsUp },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
@@ -865,6 +940,11 @@ const AdminPage = () => {
               {tab.id === "votes" && votes.length > 0 && (
                 <span className="ml-1 bg-secondary/20 text-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
                   {votes.length}
+                </span>
+              )}
+              {tab.id === "campaigns" && nominations.filter(hasUtm).length > 0 && (
+                <span className="ml-1 bg-secondary/20 text-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {nominations.filter(hasUtm).length}
                 </span>
               )}
             </button>
@@ -883,37 +963,25 @@ const AdminPage = () => {
           <>
             {/* Shortlisted → voting banner */}
             {shortlisted === 0 && pending > 0 && (
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-xl mb-5 border border-amber-500/30 bg-amber-500/10">
-                <div className="flex items-start sm:items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                    <Star className="w-4 h-4 text-amber-400" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white"><span className="text-amber-400">{pending}</span> nomination{pending !== 1 ? "s" : ""} awaiting review</p>
-                    <p className="text-xs text-primary-foreground/40">Click <strong className="text-amber-400">Shortlist</strong> on any nomination below to make it appear on the voting page</p>
-                  </div>
+              <div className="flex items-center gap-3 p-4 rounded-xl mb-5 border border-amber-500/30 bg-amber-500/10">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <Star className="w-4 h-4 text-amber-400" />
                 </div>
-                <Link to="/voteniatteachers" target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0">
-                  Voting page ↗
-                </Link>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white"><span className="text-amber-400">{pending}</span> nomination{pending !== 1 ? "s" : ""} awaiting review</p>
+                  <p className="text-xs text-primary-foreground/40">Click <strong className="text-amber-400">Shortlist</strong> on any nomination below to mark it as shortlisted</p>
+                </div>
               </div>
             )}
             {shortlisted > 0 && (
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-xl mb-5 border border-blue-500/20 bg-blue-500/10">
-                <div className="flex items-start sm:items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                    <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white"><span className="text-blue-400">{shortlisted}</span> nomination{shortlisted !== 1 ? "s" : ""} live on voting page</p>
-                    <p className="text-xs text-primary-foreground/40">Public can vote for these teachers now</p>
-                  </div>
+              <div className="flex items-center gap-3 p-4 rounded-xl mb-5 border border-blue-500/20 bg-blue-500/10">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-blue-400" />
                 </div>
-                <Link to="/voteniatteachers" target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 text-xs font-semibold transition-all whitespace-nowrap flex-shrink-0">
-                  View voting page ↗
-                </Link>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white"><span className="text-blue-400">{shortlisted}</span> nomination{shortlisted !== 1 ? "s" : ""} shortlisted</p>
+                  <p className="text-xs text-primary-foreground/40">These teachers have been shortlisted for the next stage</p>
+                </div>
               </div>
             )}
 
@@ -1077,6 +1145,14 @@ const AdminPage = () => {
                           <SelectItem value="teacher">Teacher</SelectItem>
                         </SelectContent>
                       </Select>
+                      <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                        <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[120px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {utmSources.map(s => (
+                            <SelectItem key={s} value={s}>{s === "All" ? "All sources" : prettyUtm(s)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>
@@ -1101,6 +1177,7 @@ const AdminPage = () => {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
                         <StatusBadge status={n.status} />
+                        <UtmChip n={n} />
                       </div>
                       <h3 className="font-heading font-bold text-white text-lg leading-tight">{displayName(n)}</h3>
                       <p className="text-sm text-primary-foreground/60">{n.school_name || "—"}</p>
@@ -1126,7 +1203,7 @@ const AdminPage = () => {
                 <table className="w-full min-w-[700px]">
                   <thead>
                     <tr className="border-b border-primary-foreground/10">
-                      {["Type","Photo","Teacher / Applicant","Student","School","Category","Phone","Status","Date","Actions"].map(h => (
+                      {["Type","Photo","Teacher / Applicant","Student","School","Campaign","Phone","Status","Date","Actions"].map(h => (
                         <th key={h} className="text-left text-[10px] sm:text-xs font-semibold text-primary-foreground/40 uppercase tracking-wider px-4 sm:px-5 py-3">{h}</th>
                       ))}
                     </tr>
@@ -1160,7 +1237,7 @@ const AdminPage = () => {
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[100px] truncate">{n.student_name || "—"}</td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[120px] truncate">{n.school_name || "—"}</td>
                         <td className="px-4 sm:px-5 py-3">
-                          <Badge variant="outline" className="text-[10px] border-primary-foreground/20 text-primary-foreground/60 whitespace-nowrap">{n.award_category?.replace(" Award","") || "—"}</Badge>
+                          <UtmChip n={n} />
                         </td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60">{n.phone || "—"}</td>
                         <td className="px-4 sm:px-5 py-3"><StatusBadge status={n.status} /></td>
@@ -1186,6 +1263,12 @@ const AdminPage = () => {
               )}
             </motion.div>
           </>
+        ) : activeTab === "campaigns" ? (
+          <CampaignsPanel nominations={nominations} onView={(noms, title) => {
+            const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
+            setViewingTitle(title);
+            setViewingNoms(list);
+          }} />
         ) : (
           <VotesPanel votes={votes} nominations={nominations} />
         )}

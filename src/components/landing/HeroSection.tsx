@@ -6,7 +6,7 @@ import InlineNominationForm from "@/components/nomination/InlineNominationForm";
 
 declare function gtag(...args: any[]): void;
 const track = (event: string, params?: Record<string, any>) => { try { gtag("event", event, params); } catch {} };
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
 // ── Countdown target: Sep 3, 2026 ──
@@ -68,7 +68,7 @@ const Field = ({ label, icon: Icon, prefix, value, onChange, onKeyDown, placehol
 
 // ── Inline Nomination Form (shown after OTP verify) ──
 // ── Quick Login Card ──
-const QuickNominateCard = () => {
+const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }) => {
   const { isAuthenticated, user, sendOtp, verifyOtp } = useAuth();
   const { toast } = useToast();
   const [step, setStep] = useState<"form" | "otp" | "nominate">("form");
@@ -107,6 +107,7 @@ const QuickNominateCard = () => {
       <InlineNominationForm
         userName={user?.name || name}
         userPhone={user?.phone || phone}
+        lockedRole={lockedRole}
         onClose={() => setStep("form")}
       />
     );
@@ -120,7 +121,9 @@ const QuickNominateCard = () => {
         <div className="flex items-center gap-3 mb-5">
           <img src="/niat-logo-tight.webp" alt="NIAT" className="w-9 h-11 object-contain flex-shrink-0" />
           <div>
-            <p className="font-heading font-bold text-white text-[16px] leading-tight">Nominate Your Teacher</p>
+            <p className="font-heading font-bold text-white text-[16px] leading-tight">
+              {lockedRole === "teacher" ? "Nominate Yourself" : "Nominate Your Teacher"}
+            </p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
               <p className="text-[11px] text-white/55">Free · Open across India · 3 mins</p>
@@ -197,7 +200,7 @@ const QuickNominateCard = () => {
   );
 };
 
-const HeroSection = () => {
+const HeroSection = ({ lockedRole = "student" }: { lockedRole?: "student" | "teacher" }) => {
   const countdown = useCountdown();
   const sectionRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end start"] });
@@ -296,7 +299,22 @@ const HeroSection = () => {
               </div>
 
               <div className="min-w-0 w-full">
-                <QuickNominateCard />
+                <QuickNominateCard lockedRole={lockedRole} />
+                <p className="text-center text-white/40 text-sm mt-4">
+                  {lockedRole === "teacher" ? (
+                    <>Nominating a teacher instead?{" "}
+                      <Link to="/nominate-student" className="text-secondary hover:text-secondary/80 font-medium">
+                        Go to student nomination
+                      </Link>
+                    </>
+                  ) : (
+                    <>Are you a teacher?{" "}
+                      <Link to="/nominate-teacher" className="text-secondary hover:text-secondary/80 font-medium">
+                        Nominate yourself
+                      </Link>
+                    </>
+                  )}
+                </p>
               </div>
 
               <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full"

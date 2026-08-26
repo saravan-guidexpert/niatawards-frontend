@@ -1,8 +1,5 @@
-const rawApiUrl = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
-const API_URL =
-  rawApiUrl && !rawApiUrl.includes("localhost")
-    ? rawApiUrl
-    : "https://niatawards-backend.vercel.app";
+import { getUtmParams } from "./utm";
+import { API_URL } from "./apiBase";
 const ADMIN_SECRET =
   (import.meta.env.VITE_ADMIN_SECRET || "").trim() || "niat_admin_2026_secret";
 
@@ -56,7 +53,7 @@ export const apiVerifyOtp = (phone: string, otp: string) =>
 export const createNomination = async (payload: Record<string, unknown>) => {
   const data = await request<Record<string, unknown>>("/api/nominations", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, ...getUtmParams() }),
   });
   if (!data?.id) {
     throw new ApiError("Nomination was not saved. Please try again.");
@@ -89,20 +86,6 @@ export const uploadNominationPhoto = async (file: File) => {
   return photoUrl;
 };
 
-export const getNominations = async (status = "shortlisted,winner") =>
-  asArray(await request(`/api/nominations?status=${encodeURIComponent(status)}`));
-
-export const getVotes = async (voterPhone?: string) => {
-  const q = voterPhone ? `?voter_phone=${encodeURIComponent(voterPhone)}` : "";
-  return asArray(await request(`/api/votes${q}`));
-};
-
-export const createVote = (nomination_id: string, voter_phone: string) =>
-  request("/api/votes", {
-    method: "POST",
-    body: JSON.stringify({ nomination_id, voter_phone }),
-  });
-
 export const adminGetNominations = async () =>
   asArray(await request("/api/admin/nominations", { headers: adminHeaders() }));
 
@@ -112,6 +95,33 @@ export const adminGetVotes = async () =>
 export const adminUpdateNomination = (id: string, payload: Record<string, unknown>) =>
   request(`/api/admin/nominations/${encodeURIComponent(id)}`, {
     method: "PATCH",
+    headers: adminHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+export type PromoLink = {
+  id: string;
+  created_at: string;
+  influencer_name: string;
+  influencer_slug: string;
+  platform: string;
+  campaign: string;
+  destination: string;
+  views: number;
+  last_click_at: string | null;
+};
+
+export const adminGetPromoLinks = async () =>
+  asArray<PromoLink>(await request("/api/admin/promo-links", { headers: adminHeaders() }));
+
+export const adminCreatePromoLink = (payload: {
+  influencer_name: string;
+  platform: string;
+  campaign: string;
+  destination: string;
+}) =>
+  request<PromoLink>("/api/admin/promo-links", {
+    method: "POST",
     headers: adminHeaders(),
     body: JSON.stringify(payload),
   });

@@ -83,18 +83,18 @@ interface Props {
   userPhone?: string;
   onClose?: () => void;
   embedded?: boolean; // true = no dark card wrapper (used on /nominate page)
+  lockedRole: "student" | "teacher";
 }
 
-const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded = false }: Props) => {
+const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded = false, lockedRole }: Props) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
 
   const name  = user?.name  || userName;
   const phone = user?.phone || userPhone;
+  const role  = lockedRole;
 
-  const [role, setRole]         = useState<"" | "student" | "teacher">("");
-  const [roleOpen, setRoleOpen] = useState(false);
   const [formStep, setFormStep] = useState<1 | 2>(1);
   const [loading, setLoading]   = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
@@ -130,7 +130,6 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
 
   const handleStep1Next = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!role) { toast({ title: "Please select Student or Teacher", variant: "destructive" }); return; }
     if (role === "student") {
       if (!sf.currentEducation) { toast({ title: "Please select your current education", variant: "destructive" }); return; }
       if (!sf.schoolName.trim()) { toast({ title: "Please enter school / college name", variant: "destructive" }); return; }
@@ -186,7 +185,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
         });
       }
       track("nomination_submitted", { role });
-      navigate("/thank-you");
+      navigate(`/thank-you?type=${role}`);
     } catch (err: any) {
       console.error("Nomination submit failed:", err);
       toast({
@@ -198,15 +197,6 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
       setLoading(false);
     }
   };
-
-  const roleDropdownRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (roleDropdownRef.current && !roleDropdownRef.current.contains(e.target as Node)) setRoleOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   const formContent = (
     <div className={embedded ? "" : "p-4"}>
@@ -243,31 +233,16 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
           <motion.form key="step1" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
             onSubmit={handleStep1Next} noValidate className="space-y-2">
 
-            {/* Role dropdown */}
-            <div className="relative" ref={roleDropdownRef}>
+            {/* Role — locked to this page */}
+            <div>
               <label className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">I am a</label>
-              <button type="button" onClick={() => setRoleOpen(!roleOpen)}
-                className="w-full h-10 rounded-lg px-3 flex items-center justify-between text-[13px] font-medium transition-all"
-                style={{ ...iStyle, color: role ? "#fff" : "rgba(255,255,255,0.35)" }}>
-                <span>{role === "student" ? "🎓 Student / Parent" : role === "teacher" ? "👩‍🏫 Teacher (Self-Nomination)" : "Select your role..."}</span>
-                <ChevronDown className={`w-4 h-4 text-white/50 transition-transform ${roleOpen ? "rotate-180" : ""}`} />
-              </button>
-              {roleOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 rounded-xl z-50 shadow-2xl"
-                  style={{ background: "#1a0505", border: "1px solid rgba(255,255,255,0.15)" }}>
-                  {[
-                    { val: "student", label: "🎓 Student / Parent", desc: "Nominate your teacher" },
-                    { val: "teacher", label: "👩‍🏫 Teacher", desc: "Self-nomination" },
-                  ].map(opt => (
-                    <button key={opt.val} type="button"
-                      onClick={() => { setRole(opt.val as any); setRoleOpen(false); setFormStep(1); }}
-                      className="w-full px-4 py-3 flex flex-col hover:bg-white/5 transition-all text-left border-b border-white/5 last:border-0">
-                      <p className="text-white font-semibold text-[13px]">{opt.label}</p>
-                      <p className="text-white/40 text-[11px]">{opt.desc}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div
+                className="w-full h-10 rounded-lg px-3 flex items-center text-[13px] font-medium select-none"
+                style={{ ...iStyle, opacity: 0.85, cursor: "default" }}
+                aria-disabled="true"
+              >
+                <span>{role === "student" ? "🎓 Student / Parent" : "👩‍🏫 Teacher (Self-Nomination)"}</span>
+              </div>
             </div>
 
             {/* Student Step 1 */}

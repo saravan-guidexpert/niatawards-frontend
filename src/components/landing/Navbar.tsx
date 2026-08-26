@@ -89,11 +89,12 @@ const Navbar = () => {
                 </button>
               </Link>
             )}
-            <button id="btn-nav-nominate"
-              onClick={() => { window.scrollTo({ top: 0, behavior: "smooth" }); }}
-              className="text-[13px] font-bold px-4 py-2.5 rounded-lg bg-white text-[#6B1212] hover:bg-white/90 transition-all shadow-sm min-h-[44px]">
-              Nominate
-            </button>
+            <Link to="/nominate-student">
+              <button id="btn-nav-nominate"
+                className="text-[13px] font-bold px-4 py-2.5 rounded-lg bg-white text-[#6B1212] hover:bg-white/90 transition-all shadow-sm min-h-[44px]">
+                Nominate
+              </button>
+            </Link>
           </div>
 
           {/* Mobile right */}
@@ -125,11 +126,18 @@ const Navbar = () => {
                   </a>
                 ))}
                 <div className="py-3 flex flex-col gap-2.5">
-                  <button id="btn-nav-mobile-nominate"
-                    onClick={() => { setOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                    className="w-full text-[15px] font-bold py-3.5 rounded-xl bg-white text-[#6B1212] min-h-[52px]">
-                    Nominate a Teacher
-                  </button>
+                  <Link to="/nominate-student" onClick={() => setOpen(false)}>
+                    <button id="btn-nav-mobile-nominate"
+                      className="w-full text-[15px] font-bold py-3.5 rounded-xl bg-white text-[#6B1212] min-h-[52px]">
+                      Nominate a Teacher
+                    </button>
+                  </Link>
+                  <Link to="/nominate-teacher" onClick={() => setOpen(false)}>
+                    <button id="btn-nav-mobile-nominate-teacher"
+                      className="w-full text-[15px] font-medium py-3.5 rounded-xl border border-white/20 text-white/80 min-h-[52px]">
+                      Teacher Self-Nomination
+                    </button>
+                  </Link>
                   {!isAuthenticated ? (
                     <Link to="/login" onClick={() => setOpen(false)}>
                       <button id="btn-nav-mobile-login" className="w-full text-[15px] font-medium py-3.5 rounded-xl border border-white/20 text-white/80 min-h-[52px]">Login</button>
