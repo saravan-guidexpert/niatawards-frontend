@@ -5,7 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Award, Users, TrendingUp, Download, Search,
   CheckCircle2, XCircle, Eye, BarChart3, ArrowLeft, Star,
-  Loader2, RefreshCw, LogOut, Pencil, X, Save, ThumbsUp, Trophy, Medal
+  Loader2, RefreshCw, LogOut, Pencil, X, Save, ThumbsUp, Trophy, Medal,
+  Calendar as CalendarIcon, Copy, ImageOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { isAdminLoggedIn, adminLogout } from "./AdminLoginPage";
 import { adminGetNominations, adminGetVotes, adminUpdateNomination } from "@/lib/api";
@@ -29,6 +32,35 @@ const fadeUp = {
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1, duration: 0.5 } }),
 };
 
+const istDayKey = (value: Date | string) =>
+  new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+const displayName = (n: any) => n.teacher_name || n.full_name || "—";
+const classOrExp = (n: any) => n.student_class || (n.experience ? `${n.experience} yrs` : "");
+const formatDateIn = (value: string) => new Date(value).toLocaleDateString("en-IN");
+
+const COPY_HEADERS = [
+  "Type", "Teacher/Applicant", "Student", "School", "Category", "Class",
+  "Phone", "Status", "Date", "Photo URL", "Special thing", "Impact story",
+];
+
+const nominationRow = (n: any) => [
+  n.type || "",
+  displayName(n),
+  n.student_name || "",
+  n.school_name || "",
+  n.award_category || "",
+  classOrExp(n),
+  n.phone || "",
+  n.status || "",
+  n.created_at ? formatDateIn(n.created_at) : "",
+  n.photo_url || "",
+  n.special_thing || "",
+  n.impact_story || "",
+];
+
+const flattenCell = (value: unknown) => String(value ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
+
 const StatusBadge = ({ status }: { status: string }) => {
   const styles: Record<string, string> = {
     shortlisted: "bg-blue-500/10 text-blue-400 border-blue-500/20",
@@ -40,6 +72,110 @@ const StatusBadge = ({ status }: { status: string }) => {
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${styles[status] || styles.pending}`}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
+  );
+};
+
+const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: any) => void }) => (
+  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+    <div className="flex items-start gap-4">
+      {n.photo_url ? (
+        <button type="button" onClick={() => onPhotoClick?.(n)} className="flex-shrink-0">
+          <img src={n.photo_url} alt={displayName(n)} className="w-28 h-28 rounded-xl object-cover border border-white/10" />
+        </button>
+      ) : (
+        <div className="w-28 h-28 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/25">
+          <ImageOff className="w-8 h-8" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
+          <StatusBadge status={n.status} />
+        </div>
+        <h3 className="font-heading font-bold text-white text-base">{displayName(n)}</h3>
+        <p className="text-xs text-white/50">{n.school_name || "—"}</p>
+        <p className="text-xs text-white/35">{n.created_at ? new Date(n.created_at).toLocaleString("en-IN") : "—"}</p>
+      </div>
+    </div>
+    <div className="grid grid-cols-2 gap-2 text-xs">
+      <p className="text-white/40">Student: <span className="text-white/80">{n.student_name || "—"}</span></p>
+      <p className="text-white/40">Phone: <span className="text-white/80">{n.phone || "—"}</span></p>
+      <p className="text-white/40">Category: <span className="text-white/80">{n.award_category || "—"}</span></p>
+      <p className="text-white/40">Class: <span className="text-white/80">{classOrExp(n) || "—"}</span></p>
+      {n.subject && <p className="text-white/40 col-span-2">Subject: <span className="text-white/80">{n.subject}</span></p>}
+    </div>
+    {n.special_thing && (
+      <div>
+        <p className="text-[10px] uppercase tracking-wider text-white/35 mb-1">Special thing</p>
+        <p className="text-sm text-white/75 leading-relaxed">{n.special_thing}</p>
+      </div>
+    )}
+    {n.impact_story && (
+      <div>
+        <p className="text-[10px] uppercase tracking-wider text-white/35 mb-1">Impact story</p>
+        <p className="text-sm text-white/75 leading-relaxed">{n.impact_story}</p>
+      </div>
+    )}
+  </div>
+);
+
+const ViewNominationsModal = ({
+  nominations, title, onClose, onPhotoClick,
+}: {
+  nominations: any[];
+  title: string;
+  onClose: () => void;
+  onPhotoClick?: (n: any) => void;
+}) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96, y: 16 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      onClick={(e) => e.stopPropagation()}
+      className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+    >
+      <div className="flex items-center justify-between p-5 border-b border-white/10">
+        <div>
+          <h2 className="font-heading text-lg font-bold text-white">{title}</h2>
+          <p className="text-xs text-white/40 mt-0.5">{nominations.length} nomination{nominations.length !== 1 ? "s" : ""}</p>
+        </div>
+        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="overflow-y-auto p-5 space-y-4">
+        {nominations.map((n) => (
+          <NominationDetailCard key={n.id} n={n} onPhotoClick={onPhotoClick} />
+        ))}
+      </div>
+    </motion.div>
+  </div>
+);
+
+const PhotoLightbox = ({ photo, onClose }: { photo: { url: string; name: string }; onClose: () => void }) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)" }} onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        className="relative max-w-3xl w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button onClick={onClose} className="absolute -top-10 right-0 text-white/70 hover:text-white">
+          <X className="w-6 h-6" />
+        </button>
+        <img src={photo.url} alt={photo.name} className="w-full max-h-[80vh] object-contain rounded-xl" />
+        <p className="text-center text-white/80 text-sm mt-3">{photo.name}</p>
+      </motion.div>
+    </div>
   );
 };
 
@@ -447,7 +583,10 @@ const AdminPage = () => {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
   const [editingNom, setEditingNom] = useState<any | null>(null);
+  const [viewingNoms, setViewingNoms] = useState<any[] | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!isAdminLoggedIn()) {
@@ -517,7 +656,8 @@ const AdminPage = () => {
     const matchCategory = categoryFilter === "All" || n.award_category === categoryFilter;
     const matchStatus = statusFilter === "All" || n.status === statusFilter;
     const matchType = typeFilter === "All" || n.type === typeFilter;
-    return matchSearch && matchCategory && matchStatus && matchType;
+    const matchDate = !dateFilter || istDayKey(n.created_at) === istDayKey(dateFilter);
+    return matchSearch && matchCategory && matchStatus && matchType && matchDate;
   });
 
   const categories = ["All", ...Array.from(new Set(nominations.map(n => n.award_category).filter(Boolean)))];
@@ -547,14 +687,38 @@ const AdminPage = () => {
 
   const exportCSV = () => {
     const rows = [
-      ["Type", "Teacher/Applicant", "School", "Category", "Class", "Phone", "Status", "Date"],
-      ...filtered.map(n => [n.type, n.teacher_name || n.full_name, n.school_name, n.award_category, n.student_class || (n.experience ? `${n.experience} yrs` : ""), n.phone, n.status, new Date(n.created_at).toLocaleDateString("en-IN")])
+      COPY_HEADERS,
+      ...filtered.map(nominationRow),
     ];
-    const csv = rows.map(r => r.map(v => `"${v || ""}"`).join(",")).join("\n");
+    const csv = rows.map(r => r.map(v => `"${flattenCell(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "nominations.csv"; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const copyAllFiltered = async () => {
+    if (filtered.length === 0) {
+      toast({ title: "Nothing to copy", description: "No nominations match the current filters.", variant: "destructive" });
+      return;
+    }
+    const tsv = [COPY_HEADERS, ...filtered.map(nominationRow)]
+      .map((row) => row.map(flattenCell).join("\t"))
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(tsv);
+      toast({ title: `Copied ${filtered.length} nomination${filtered.length !== 1 ? "s" : ""}` });
+    } catch {
+      toast({ title: "Copy failed", description: "Could not access the clipboard.", variant: "destructive" });
+    }
+  };
+
+  const openViewAll = () => {
+    if (filtered.length === 0) {
+      toast({ title: "Nothing to view", description: "No nominations match the current filters.", variant: "destructive" });
+      return;
+    }
+    setViewingNoms(filtered);
   };
 
   if (!isAdminLoggedIn()) {
@@ -575,6 +739,21 @@ const AdminPage = () => {
             onClose={() => setEditingNom(null)}
             onSave={handleEditSave}
           />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {viewingNoms && (
+          <ViewNominationsModal
+            nominations={viewingNoms}
+            title={viewingNoms.length === 1 ? "Nomination details" : "View all nominations"}
+            onClose={() => setViewingNoms(null)}
+            onPhotoClick={(n) => n.photo_url && setLightbox({ url: n.photo_url, name: displayName(n) })}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {lightbox && (
+          <PhotoLightbox photo={lightbox} onClose={() => setLightbox(null)} />
         )}
       </AnimatePresence>
 
@@ -769,15 +948,53 @@ const AdminPage = () => {
               className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 overflow-hidden">
               <div className="p-4 sm:p-6 border-b border-primary-foreground/10">
                 <div className="flex flex-col gap-3">
-                  <h2 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">
-                    All Nominations <span className="text-primary-foreground/40 font-normal text-sm">({filtered.length})</span>
-                  </h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <h2 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">
+                      All Nominations <span className="text-primary-foreground/40 font-normal text-sm">({filtered.length})</span>
+                    </h2>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={openViewAll}>
+                        <Eye className="w-3.5 h-3.5" /> View all
+                      </Button>
+                      <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={() => void copyAllFiltered()}>
+                        <Copy className="w-3.5 h-3.5" /> Copy all
+                      </Button>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <div className="relative flex-1 min-w-[160px]">
                       <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary-foreground/30" />
                       <Input placeholder="Search teacher, student, school..." value={search} onChange={(e) => setSearch(e.target.value)}
                         className="pl-9 bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9" />
                     </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-primary-foreground/5 border border-primary-foreground/10 text-primary-foreground text-xs"
+                        >
+                          <CalendarIcon className="w-3.5 h-3.5 text-primary-foreground/50" />
+                          {dateFilter ? dateFilter.toLocaleDateString("en-IN") : "All dates"}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-3 bg-[#141414] border-white/10" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dateFilter}
+                          onSelect={setDateFilter}
+                          className="text-white"
+                        />
+                        {dateFilter && (
+                          <button
+                            type="button"
+                            onClick={() => setDateFilter(undefined)}
+                            className="mt-2 w-full text-xs text-white/60 hover:text-white py-1.5 rounded-md hover:bg-white/5"
+                          >
+                            Clear date
+                          </button>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                     <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                       <SelectTrigger className="w-auto min-w-[130px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
                       <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c === "All" ? "All Categories" : c}</SelectItem>)}</SelectContent>
@@ -805,7 +1022,7 @@ const AdminPage = () => {
                 <table className="w-full min-w-[700px]">
                   <thead>
                     <tr className="border-b border-primary-foreground/10">
-                      {["Type","Teacher / Applicant","Student","School","Category","Phone","Status","Date","Actions"].map(h => (
+                      {["Type","Photo","Teacher / Applicant","Student","School","Category","Phone","Status","Date","Actions"].map(h => (
                         <th key={h} className="text-left text-[10px] sm:text-xs font-semibold text-primary-foreground/40 uppercase tracking-wider px-4 sm:px-5 py-3">{h}</th>
                       ))}
                     </tr>
@@ -817,13 +1034,24 @@ const AdminPage = () => {
                         <td className="px-4 sm:px-5 py-3">
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
                         </td>
-                        <td className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-medium text-primary-foreground max-w-[130px]">
-                          <div className="flex items-center gap-2 min-w-0">
-                            {n.photo_url ? (
-                              <img src={n.photo_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-white/10" />
-                            ) : null}
-                            <span className="truncate">{n.teacher_name || n.full_name || "—"}</span>
-                          </div>
+                        <td className="px-4 sm:px-5 py-3">
+                          {n.photo_url ? (
+                            <button
+                              type="button"
+                              onClick={() => setLightbox({ url: n.photo_url, name: displayName(n) })}
+                              className="block"
+                              title="View photo"
+                            >
+                              <img src={n.photo_url} alt={displayName(n)} className="w-14 h-14 rounded-xl object-cover border border-white/10 hover:ring-2 hover:ring-white/30" />
+                            </button>
+                          ) : (
+                            <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/20">
+                              <ImageOff className="w-5 h-5" />
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-medium text-primary-foreground min-w-[140px]">
+                          {displayName(n)}
                         </td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[100px] truncate">{n.student_name || "—"}</td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[120px] truncate">{n.school_name || "—"}</td>
@@ -835,6 +1063,10 @@ const AdminPage = () => {
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/40 whitespace-nowrap">{new Date(n.created_at).toLocaleDateString("en-IN")}</td>
                         <td className="px-3 py-3">
                           <div className="flex flex-wrap items-center gap-1">
+                            <button onClick={() => setViewingNoms([n])}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all text-[11px] font-semibold">
+                              <Eye className="w-3 h-3" /> View
+                            </button>
                             {/* Edit */}
                             <button onClick={() => setEditingNom(n)}
                               className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-white/50 hover:text-white transition-all text-[11px] font-semibold">
