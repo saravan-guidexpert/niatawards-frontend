@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Menu, X, LogIn, LogOut } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -9,7 +9,7 @@ const NAV_BG_MENU = "#0a0a0a";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -67,27 +67,16 @@ const Navbar = () => {
 
           {/* Desktop right */}
           <div className="hidden md:flex items-center gap-2">
-            {isAuthenticated ? (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 bg-black/20 border border-white/15 rounded-xl px-3 py-1.5 max-w-[200px]">
-                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-bold text-white">{initials}</span>
-                  </div>
-                  <div className="flex flex-col leading-none min-w-0">
-                    <span className="text-[12px] font-semibold text-white truncate">{user?.name || "Welcome"}</span>
-                    <span className="text-[10px] text-white/50 truncate">+91 {user?.phone}</span>
-                  </div>
+            {isAuthenticated && (
+              <div className="flex items-center gap-2 bg-black/20 border border-white/15 rounded-xl px-3 py-1.5 max-w-[200px]">
+                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-[10px] font-bold text-white">{initials}</span>
                 </div>
-                <button id="btn-nav-logout" onClick={logout} title="Logout" className="w-8 h-8 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-all">
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex flex-col leading-none min-w-0">
+                  <span className="text-[12px] font-semibold text-white truncate">{user?.name || "Welcome"}</span>
+                  <span className="text-[10px] text-white/50 truncate">+91 {user?.phone}</span>
+                </div>
               </div>
-            ) : (
-              <Link to="/login">
-                <button id="btn-nav-login" className="text-[13px] font-medium text-white/70 hover:text-white flex items-center gap-1.5 transition-colors px-2 py-2 min-h-[44px]">
-                  <LogIn className="w-3.5 h-3.5" /> Login
-                </button>
-              </Link>
             )}
             <Link to="/nominate-student">
               <button id="btn-nav-nominate"
@@ -138,16 +127,6 @@ const Navbar = () => {
                       Teacher Self-Nomination
                     </button>
                   </Link>
-                  {!isAuthenticated ? (
-                    <Link to="/login" onClick={() => setOpen(false)}>
-                      <button id="btn-nav-mobile-login" className="w-full text-[15px] font-medium py-3.5 rounded-xl border border-white/20 text-white/80 min-h-[52px]">Login</button>
-                    </Link>
-                  ) : (
-                    <button id="btn-nav-mobile-logout" onClick={() => { logout(); setOpen(false); }}
-                      className="w-full text-[15px] font-medium py-3.5 rounded-xl border border-white/20 text-white/80 flex items-center justify-center gap-2 min-h-[52px]">
-                      <LogOut className="w-4 h-4" /> Logout
-                    </button>
-                  )}
                 </div>
               </div>
             </motion.div>

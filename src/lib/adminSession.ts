@@ -1,4 +1,4 @@
-export const PANEL_PERMISSIONS = ["nominations", "campaigns", "digital"] as const;
+export const PANEL_PERMISSIONS = ["nominations", "campaigns", "digital", "whatsapp"] as const;
 
 export type PanelPermission = (typeof PANEL_PERMISSIONS)[number];
 export type AdminRole = "super_admin" | "staff";
@@ -22,6 +22,7 @@ export const PANEL_LABELS: Record<PanelPermission, string> = {
   nominations: "Nominations",
   campaigns: "Influencer Tracking",
   digital: "Digital Marketing",
+  whatsapp: "WhatsApp",
 };
 
 const isPanelPermission = (value: unknown): value is PanelPermission =>

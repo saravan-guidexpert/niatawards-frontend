@@ -118,7 +118,9 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
       return;
     }
     const existing = getDraftSession();
-    if (existing?.token && existing.type === lockedRole && existing.phone === nominatorPhone.replace(/\D/g, "").slice(-10)) {
+    // Any saved draft for this phone is resumed, whichever role it was started as;
+    // the form reads the role back from the draft.
+    if (existing?.token && existing.phone === nominatorPhone.replace(/\D/g, "").slice(-10)) {
       setDraftToken(existing.token);
       setStep("nominate");
       return;
@@ -174,7 +176,6 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
         userPhone={user?.phone || phone}
         lockedRole={lockedRole}
         draftToken={draftToken}
-        onClose={() => setStep("form")}
       />
     );
   }

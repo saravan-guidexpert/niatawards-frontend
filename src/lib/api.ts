@@ -311,3 +311,205 @@ export const adminDeleteUser = (id: string) =>
     method: "DELETE",
     headers: adminHeaders(),
   });
+
+export type WhatsAppOpsMeta = {
+  enabled: boolean;
+  apiKeyConfigured: boolean;
+  sourceConfigured: boolean;
+  srcNameConfigured: boolean;
+  webhookSecretConfigured: boolean;
+  cronSecretConfigured: boolean;
+  templateEnvKeys: string[];
+  envHints: { key: string; configured: boolean }[];
+  webhookUrl: string;
+  cronEndpoint: string;
+  optOuts: number;
+  openGroups: number;
+};
+
+export type WhatsAppAttemptStage = {
+  attemptNumber: number;
+  title: string;
+  subtitle: string;
+  targeted: number;
+  submitted: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  inFlight: number;
+  excluded: number;
+  successRate: number;
+};
+
+export type WhatsAppDayTotals = {
+  recipients: number;
+  accepted: number;
+  delivered: number;
+  read: number;
+  permanentFailed: number;
+  transientFailed: number;
+  excluded: number;
+  undelivered: number;
+  exhausted: number;
+  inFlight: number;
+};
+
+export type WhatsAppOpsOverview = {
+  date: string;
+  byAttempt: WhatsAppAttemptStage[];
+  totals: WhatsAppDayTotals;
+  failureBuckets: { reason: string; count: number }[];
+  trend: { date: string; recipients: number; delivered: number; permanent: number; transient: number }[];
+  nextPromotionDueAt: string | null;
+  kinds: string[];
+  syncedAt: string;
+};
+
+export type WhatsAppOpsMessage = {
+  id: string;
+  retryGroupId: string | null;
+  phone: string;
+  messageKind: string;
+  attemptNumber: number;
+  status: string;
+  source: string;
+  retrySource: string;
+  retryEligible: boolean;
+  retryExclusionReason: string | null;
+  terminalFailureKind: string | null;
+  errorMessage: string | null;
+  webhookErrorCode: string | null;
+  templateIdEnvKey: string | null;
+  templateId: string | null;
+  params: string[];
+  gupshupMessageId: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  readAt: string | null;
+  failedAt: string | null;
+};
+
+export const adminGetWhatsAppMeta = () =>
+  request<WhatsAppOpsMeta>("/api/admin/whatsapp-ops/meta", { headers: adminHeaders() });
+
+export const adminGetWhatsAppOverview = (date?: string, kind?: string) => {
+  const params = new URLSearchParams();
+  if (date) params.set("date", date);
+  if (kind) params.set("kind", kind);
+  const q = params.toString();
+  return request<WhatsAppOpsOverview>(
+    `/api/admin/whatsapp-ops/overview${q ? `?${q}` : ""}`,
+    { headers: adminHeaders() }
+  );
+};
+
+export const adminGetWhatsAppMessages = (opts: {
+  date?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+  status?: string;
+  kind?: string;
+  attemptNumber?: string;
+  phone?: string;
+  failed?: boolean;
+}) => {
+  const params = new URLSearchParams();
+  if (opts.date) params.set("date", opts.date);
+  if (opts.from) params.set("from", opts.from);
+  if (opts.to) params.set("to", opts.to);
+  if (opts.page) params.set("page", String(opts.page));
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.status) params.set("status", opts.status);
+  if (opts.kind) params.set("kind", opts.kind);
+  if (opts.attemptNumber) params.set("attemptNumber", opts.attemptNumber);
+  if (opts.phone) params.set("phone", opts.phone);
+  if (opts.failed) params.set("failed", "1");
+  const q = params.toString();
+  return request<{ date: string; from?: string; to?: string; page: number; limit: number; total: number; items: WhatsAppOpsMessage[] }>(
+    `/api/admin/whatsapp-ops/messages${q ? `?${q}` : ""}`,
+    { headers: adminHeaders() }
+  );
+};
+
+export type WhatsAppRetryGroupRow = {
+  id: string;
+  messageKind: string;
+  status: string;
+  trigger: string;
+  nextPromotionDueAt: string | null;
+  attempt2TriggeredAt: string | null;
+  attempt3TriggeredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WhatsAppWebhookRow = {
+  id: string;
+  type: string;
+  eventStage: string | null;
+  gsId: string | null;
+  providerId: string | null;
+  destination: string | null;
+  sourcePhone: string | null;
+  inboundText: string | null;
+  matchedMessageEventId: string | null;
+  payloadSnippet: string | null;
+  createdAt: string;
+};
+
+export const adminGetWhatsAppRetryGroups = (opts: { date?: string; page?: number; status?: string }) => {
+  const params = new URLSearchParams();
+  if (opts.date) params.set("date", opts.date);
+  if (opts.page) params.set("page", String(opts.page));
+  if (opts.status) params.set("status", opts.status);
+  const q = params.toString();
+  return request<{ total: number; page: number; items: WhatsAppRetryGroupRow[] }>(
+    `/api/admin/whatsapp-ops/retry-groups${q ? `?${q}` : ""}`,
+    { headers: adminHeaders() }
+  );
+};
+
+export const adminGetWhatsAppWebhooks = (opts: { date?: string; page?: number; type?: string }) => {
+  const params = new URLSearchParams();
+  if (opts.date) params.set("date", opts.date);
+  if (opts.page) params.set("page", String(opts.page));
+  if (opts.type) params.set("type", opts.type);
+  const q = params.toString();
+  return request<{ total: number; page: number; items: WhatsAppWebhookRow[] }>(
+    `/api/admin/whatsapp-ops/webhooks${q ? `?${q}` : ""}`,
+    { headers: adminHeaders() }
+  );
+};
+
+export const adminGetWhatsAppCron = () =>
+  request<{
+    cronSecretConfigured: boolean;
+    endpoint: string;
+    openGroups: number;
+    dueNow: number;
+    exhaustedToday: number;
+    nextPromotionDueAt: string | null;
+  }>("/api/admin/whatsapp-ops/cron", { headers: adminHeaders() });
+
+export const adminWhatsAppTestSend = (payload: { phone: string; kind?: string; params?: string[] }) =>
+  request<{ success: boolean; eventId: string | null; status: string; error?: string }>(
+    "/api/admin/whatsapp-ops/actions/test-send",
+    {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify(payload),
+    }
+  );
+
+export const adminWhatsAppResend = (id: string) =>
+  request<{ success: boolean; eventId: string | null; status: string; error?: string }>(
+    "/api/admin/whatsapp-ops/actions/resend",
+    {
+      method: "POST",
+      headers: adminHeaders(),
+      body: JSON.stringify({ id }),
+    }
+  );

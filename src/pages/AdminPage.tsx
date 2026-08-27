@@ -6,7 +6,8 @@ import {
   Award, Users, TrendingUp, Download, Search,
   CheckCircle2, XCircle, Eye, BarChart3, ArrowLeft, Star,
   Loader2, RefreshCw, LogOut, Pencil, X, Save,
-  Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2, Target, Shield
+  Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2, Target, Shield,
+  Hourglass, MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import CampaignsPanel from "@/components/admin/CampaignsPanel";
 import DigitalMarketingPanel from "@/components/admin/DigitalMarketingPanel";
 import AccessManagementPanel from "@/components/admin/AccessManagementPanel";
 import FunnelAnalytics from "@/components/admin/FunnelAnalytics";
+import WhatsAppOpsPanel from "@/components/admin/WhatsAppOpsPanel";
 import {
   allowedAdminTabs,
   firstAllowedTab,
@@ -47,13 +49,26 @@ const fadeUp = {
 const istDayKey = (value: Date | string) =>
   new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
-const displayName = (n: any) => n.teacher_name || n.full_name || "—";
+// Leads that stopped before step 1 have no teacher_name or full_name yet.
+const displayName = (n: any) =>
+  n.teacher_name || n.full_name || n.nominator_name || n.student_name || "—";
 const classOrExp = (n: any) => n.student_class || (n.experience ? `${n.experience} yrs` : "");
 const formatDateIn = (value: string) => new Date(value).toLocaleDateString("en-IN");
 
+const isIncomplete = (n: any) => n.status === "draft";
+
+const STAGE_LABELS: Record<string, string> = {
+  identity: "Name and phone",
+  otp_sent: "OTP sent",
+  otp_verified: "OTP verified",
+  details: "Details filled",
+};
+
+const stageLabel = (n: any) => (isIncomplete(n) ? STAGE_LABELS[n.form_step] || "Started" : "—");
+
 const COPY_HEADERS = [
   "Type", "Teacher/Applicant", "Student", "School", "Category", "Class",
-  "Teacher Phone", "User Name", "User Phone", "Status", "Date", "Photo URL",
+  "Teacher Phone", "User Name", "User Phone", "Status", "Stage", "Date", "Photo URL",
   "Special thing", "Impact story",
   "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content",
 ];
@@ -69,6 +84,7 @@ const nominationRow = (n: any) => [
   n.nominator_name || "",
   n.nominator_phone || "",
   n.status || "",
+  isIncomplete(n) ? stageLabel(n) : "",
   n.created_at ? formatDateIn(n.created_at) : "",
   n.photo_url || "",
   n.special_thing || "",
@@ -141,10 +157,12 @@ const StatusBadge = ({ status }: { status: string }) => {
     winner: "bg-green-500/10 text-green-400 border-green-500/20",
     pending: "bg-secondary/10 text-secondary border-secondary/20",
     rejected: "bg-destructive/10 text-destructive border-destructive/20",
+    draft: "bg-white/5 text-white/50 border-white/15",
   };
+  const labels: Record<string, string> = { draft: "Incomplete" };
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${styles[value] || styles.pending}`}>
-      {value.charAt(0).toUpperCase() + value.slice(1)}
+      {labels[value] || value.charAt(0).toUpperCase() + value.slice(1)}
     </span>
   );
 };
@@ -178,7 +196,7 @@ const NominationActions = ({
       <button type="button" onClick={onEdit} className={`${btn} bg-white/5 hover:bg-white/10 text-white/50 hover:text-white`}>
         <Pencil className="w-3 h-3" /> Edit
       </button>
-      {n.status !== "shortlisted" && n.status !== "winner" && (
+      {!isIncomplete(n) && n.status !== "shortlisted" && n.status !== "winner" && (
         <button type="button" onClick={() => onStatus(n.id, "shortlisted")} disabled={disabled}
           className={`${btn} bg-blue-500/15 hover:bg-blue-500/25 text-blue-400`} title="Shortlist this nomination">
           {busy("shortlisted") ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
@@ -192,14 +210,14 @@ const NominationActions = ({
           Revoke
         </button>
       )}
-      {n.status !== "winner" && (
+      {!isIncomplete(n) && n.status !== "winner" && (
         <button type="button" onClick={() => onStatus(n.id, "winner")} disabled={disabled}
           className={`${btn} bg-green-500/15 hover:bg-green-500/25 text-green-400`}>
           {busy("winner") ? <Loader2 className="w-3 h-3 animate-spin" /> : <Award className="w-3 h-3" />}
           Winner
         </button>
       )}
-      {n.status !== "rejected" && n.status !== "winner" && (
+      {!isIncomplete(n) && n.status !== "rejected" && n.status !== "winner" && (
         <button type="button" onClick={() => onStatus(n.id, "rejected")} disabled={disabled}
           className={`${btn} bg-red-500/15 hover:bg-red-500/25 text-red-400`}>
           {busy("rejected") ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
@@ -349,6 +367,9 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
     setSaving(true);
     try {
       await adminUpdateNomination(nomination.id, {
+          // "draft" is not an assignable status, so an incomplete lead keeps its stage
+          // unless the admin explicitly picks one above.
+          ...(isIncomplete(form) ? {} : { status: form.status }),
           teacher_name: form.teacher_name,
           full_name: form.full_name,
           school_name: form.school_name,
@@ -359,7 +380,6 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
           subject: form.subject,
           special_thing: form.special_thing,
           impact_story: form.impact_story,
-          status: form.status,
           experience: form.experience,
         });
       toast({ title: "✅ Nomination updated successfully!" });
@@ -397,6 +417,11 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
           {/* Status — most important, at top */}
           <div className="bg-white/[0.03] rounded-xl p-4 border border-white/10">
             <Label className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-3 block">Application Status</Label>
+            {isIncomplete(form) && (
+              <p className="text-xs text-white/40 mb-3">
+                This lead is incomplete ({stageLabel(nomination)}). Pick a status only if you want to move it into review.
+              </p>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {["pending", "shortlisted", "winner", "rejected"].map(s => (
                 <button key={s} type="button"
@@ -574,12 +599,14 @@ const AdminPage = () => {
     navigate("/admin-login");
   };
 
-  const total = nominations.length;
-  const pending = nominations.filter(n => n.status === "pending").length;
-  const shortlisted = nominations.filter(n => n.status === "shortlisted").length;
-  const winners = nominations.filter(n => n.status === "winner").length;
+  const submitted = nominations.filter(n => !isIncomplete(n));
+  const total = submitted.length;
+  const pending = submitted.filter(n => n.status === "pending").length;
+  const shortlisted = submitted.filter(n => n.status === "shortlisted").length;
+  const winners = submitted.filter(n => n.status === "winner").length;
+  const incompleteLeads = nominations.length - submitted.length;
 
-  const categoryCount = nominations.reduce((acc: Record<string, number>, n) => {
+  const categoryCount = submitted.reduce((acc: Record<string, number>, n) => {
     acc[n.award_category] = (acc[n.award_category] || 0) + 1;
     return acc;
   }, {});
@@ -741,7 +768,7 @@ const AdminPage = () => {
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
               <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
             </Button>
-            {activeTab !== "access" && (
+            {activeTab !== "access" && activeTab !== "whatsapp" && (
               <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
                 <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span>
               </Button>
@@ -760,6 +787,7 @@ const AdminPage = () => {
             { id: "nominations" as const, label: "Nominations", icon: Users },
             { id: "campaigns" as const, label: "Influencer Tracking", icon: Megaphone },
             { id: "digital" as const, label: "Digital Marketing", icon: Target },
+            { id: "whatsapp" as const, label: "WhatsApp", icon: MessageCircle },
             { id: "access" as const, label: "Access", icon: Shield },
           ].filter((tab) => tabs.includes(tab.id)).map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
@@ -770,9 +798,9 @@ const AdminPage = () => {
               }`}>
               <tab.icon className="w-4 h-4" />
               {tab.label}
-              {tab.id === "campaigns" && nominations.filter(hasUtm).length > 0 && (
+              {tab.id === "campaigns" && submitted.filter(hasUtm).length > 0 && (
                 <span className="ml-1 bg-secondary/20 text-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  {nominations.filter(hasUtm).length}
+                  {submitted.filter(hasUtm).length}
                 </span>
               )}
             </button>
@@ -782,7 +810,7 @@ const AdminPage = () => {
 
       {/* Content */}
       <div className="container py-6 sm:py-8 px-3 sm:px-4">
-        {loading && activeTab !== "access" ? (
+        {loading && activeTab !== "access" && activeTab !== "whatsapp" ? (
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-8 h-8 text-secondary animate-spin" />
             <span className="ml-3 text-primary-foreground/60">Loading...</span>
@@ -824,12 +852,13 @@ const AdminPage = () => {
             )}
 
             {/* Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8">
               {[
                 { label: "Total Nominations", value: total, icon: Users, color: "bg-primary" },
                 { label: "Pending Review", value: pending, icon: Eye, color: "bg-secondary" },
                 { label: "Shortlisted", value: shortlisted, icon: CheckCircle2, color: "bg-blue-600" },
                 { label: "Winners", value: winners, icon: Award, color: "bg-green-600" },
+                { label: "Incomplete leads", value: incompleteLeads, icon: Hourglass, color: "bg-white/20" },
               ].map((stat, i) => (
                 <motion.div key={stat.label} custom={i} initial="hidden" animate="visible" variants={fadeUp}
                   className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 p-4 sm:p-5">
@@ -881,8 +910,8 @@ const AdminPage = () => {
                   <Award className="w-4 h-4 sm:w-5 sm:h-5 text-secondary" />Submission Types
                 </h2>
                 {[
-                  { label: "Student Nominations", count: nominations.filter(n => n.type === "student").length, color: "bg-primary" },
-                  { label: "Teacher Self-Nominations", count: nominations.filter(n => n.type === "teacher").length, color: "bg-secondary" },
+                  { label: "Student Nominations", count: submitted.filter(n => n.type === "student").length, color: "bg-primary" },
+                  { label: "Teacher Self-Nominations", count: submitted.filter(n => n.type === "teacher").length, color: "bg-secondary" },
                 ].map(item => (
                   <div key={item.label} className="flex items-center justify-between p-3 rounded-lg bg-primary-foreground/5 border border-primary-foreground/10">
                     <div className="flex items-center gap-2">
@@ -892,19 +921,19 @@ const AdminPage = () => {
                     <span className="text-sm sm:text-base font-bold text-primary-foreground">{item.count}</span>
                   </div>
                 ))}
-                {nominations[0] && (
+                {submitted[0] && (
                   <div className="mt-2 p-4 rounded-lg bg-primary-foreground/5 border border-primary-foreground/10">
                     <div className="flex items-center gap-2 mb-2">
                       <Star className="w-4 h-4 text-secondary" />
                       <span className="text-sm font-semibold text-primary-foreground">Latest Submission</span>
                     </div>
                     <p className="text-sm text-primary-foreground/60 flex items-center gap-2">
-                      {nominations[0].photo_url ? (
-                        <img src={nominations[0].photo_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
+                      {submitted[0].photo_url ? (
+                        <img src={submitted[0].photo_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
                       ) : null}
-                      {nominations[0].teacher_name || nominations[0].full_name || "—"}
+                      {submitted[0].teacher_name || submitted[0].full_name || "—"}
                     </p>
-                    <p className="text-xs text-primary-foreground/40">{nominations[0].school_name || ""} · {new Date(nominations[0].created_at).toLocaleDateString("en-IN")}</p>
+                    <p className="text-xs text-primary-foreground/40">{submitted[0].school_name || ""} · {new Date(submitted[0].created_at).toLocaleDateString("en-IN")}</p>
                   </div>
                 )}
               </motion.div>
@@ -970,8 +999,10 @@ const AdminPage = () => {
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
                         <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[110px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {["All","pending","shortlisted","winner","rejected"].map(s => (
-                            <SelectItem key={s} value={s}>{s === "All" ? "All Status" : s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+                          {["All","pending","shortlisted","winner","rejected","draft"].map(s => (
+                            <SelectItem key={s} value={s}>
+                              {s === "All" ? "All Status" : s === "draft" ? "Incomplete" : s.charAt(0).toUpperCase() + s.slice(1)}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1017,6 +1048,9 @@ const AdminPage = () => {
                         <StatusBadge status={n.status} />
                         <UtmChip n={n} />
                       </div>
+                      {isIncomplete(n) && (
+                        <p className="text-xs text-primary-foreground/50">Stage: {stageLabel(n)}</p>
+                      )}
                       <h3 className="font-heading font-bold text-white text-lg leading-tight">{displayName(n)}</h3>
                       <p className="text-sm text-primary-foreground/60">{n.school_name || "—"}</p>
                       {n.student_name && <p className="text-xs text-primary-foreground/45">Student: {n.student_name}</p>}
@@ -1039,10 +1073,10 @@ const AdminPage = () => {
                 ))}
               </div>
               <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full min-w-[740px]">
+                <table className="w-full min-w-[820px]">
                   <thead>
                     <tr className="border-b border-primary-foreground/10">
-                      {["Type","Photo","Teacher / Applicant","Student","School","Campaign","Phones","Status","Date","Actions"].map(h => (
+                      {["Type","Photo","Teacher / Applicant","Student","School","Campaign","Phones","Status","Stage","Date","Actions"].map(h => (
                         <th key={h} className="text-left text-[10px] sm:text-xs font-semibold text-primary-foreground/40 uppercase tracking-wider px-4 sm:px-5 py-3">{h}</th>
                       ))}
                     </tr>
@@ -1082,6 +1116,7 @@ const AdminPage = () => {
                           <PhonePair n={n} />
                         </td>
                         <td className="px-4 sm:px-5 py-3"><StatusBadge status={n.status} /></td>
+                        <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/50 whitespace-nowrap">{stageLabel(n)}</td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/40 whitespace-nowrap">{new Date(n.created_at).toLocaleDateString("en-IN")}</td>
                         <td className="px-3 py-3">
                           <NominationActions
@@ -1105,17 +1140,19 @@ const AdminPage = () => {
             </motion.div>
           </>
         ) : activeTab === "campaigns" ? (
-          <CampaignsPanel nominations={nominations} onView={(noms, title) => {
+          <CampaignsPanel nominations={submitted} onView={(noms, title) => {
             const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
             setViewingTitle(title);
             setViewingNoms(list);
           }} />
         ) : activeTab === "digital" ? (
-          <DigitalMarketingPanel nominations={nominations} onView={(noms, title) => {
+          <DigitalMarketingPanel nominations={submitted} onView={(noms, title) => {
             const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
             setViewingTitle(title);
             setViewingNoms(list);
           }} />
+        ) : activeTab === "whatsapp" ? (
+          <WhatsAppOpsPanel />
         ) : null}
       </div>
     </div>

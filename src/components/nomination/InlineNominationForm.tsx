@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, X, CheckCircle2, Loader2, ArrowRight, User } from "lucide-react";
+import { ChevronDown, CheckCircle2, Loader2, ArrowRight, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { createNominationDraft, getNominationDraft, updateNominationDraft, type NominationDraft } from "@/lib/api";
@@ -53,19 +53,21 @@ export const CustomSelect = ({ value, onChange, options, placeholder }: {
 };
 
 const FormTextarea = ({
-  label, value, onChange, placeholder, required, rows = 3,
+  label, value, onChange, placeholder, required, optional, rows = 3,
 }: {
   label?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   required?: boolean;
+  optional?: boolean;
   rows?: number;
 }) => (
   <div>
     {label && (
       <label className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">
         {label}
+        {optional && <span className="text-white/35 font-normal normal-case"> (optional)</span>}
       </label>
     )}
     <textarea
@@ -80,23 +82,32 @@ const FormTextarea = ({
   </div>
 );
 
+const ROLE_LABELS: Record<"student" | "teacher", string> = {
+  student: "🎓 Student / Parent",
+  teacher: "👩‍🏫 Teacher (Self-Nomination)",
+};
+
+const ROLE_BY_LABEL: Record<string, "student" | "teacher"> = {
+  [ROLE_LABELS.student]: "student",
+  [ROLE_LABELS.teacher]: "teacher",
+};
+
 interface Props {
   userName?: string;
   userPhone?: string;
-  onClose?: () => void;
   embedded?: boolean; // true = no dark card wrapper (used on /nominate page)
   lockedRole: "student" | "teacher";
   draftToken?: string;
 }
 
-const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded = false, lockedRole, draftToken }: Props) => {
+const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false, lockedRole, draftToken }: Props) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
 
   const name  = user?.name  || userName;
   const phone = user?.phone || userPhone;
-  const role  = lockedRole;
+  const [role, setRole] = useState<"student" | "teacher">(lockedRole);
 
   const [formStep, setFormStep] = useState<1 | 2>(1);
   const [loading, setLoading]   = useState(false);
@@ -127,6 +138,9 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
   const asText = (value: unknown) => (typeof value === "string" ? value : "");
 
   const applyDraft = (draft: NominationDraft) => {
+    // The saved draft wins over the page default, so a chosen role survives a reload.
+    const draftType = asText(draft.type);
+    if (draftType === "student" || draftType === "teacher") setRole(draftType);
     const teacherName = asText(draft.teacher_name);
     const nominatorPhone = asText(draft.nominator_phone) || phone.replace(/\D/g, "").slice(-10);
     const savedPhone = asText(draft.phone);
@@ -256,6 +270,16 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
     "Undergraduate / College", "Postgraduate / College", "All Classes",
   ];
 
+  const handleRoleChange = (next: "student" | "teacher") => {
+    if (next === role) return;
+    setRole(next);
+    setFormStep(1);
+    if (!token) return;
+    const session = getDraftSession();
+    if (session?.token === token) saveDraftSession({ ...session, type: next });
+    updateNominationDraft({ draft_token: token, type: next }).catch(() => undefined);
+  };
+
   const handleStep1Next = async (e: React.FormEvent) => {
     e.preventDefault();
     if (role === "student") {
@@ -320,7 +344,6 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
       if (photoBusy) throw new Error("Please wait for the photo to finish uploading");
       if (role === "student") {
         if (!sf.specialThing.trim()) throw new Error("Please fill in what's special about this teacher");
-        if (!sf.impactStory.trim()) throw new Error("Please describe their impact");
         await updateNominationDraft({
           draft_token: token,
           complete: true,
@@ -400,15 +423,6 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
                   <CheckCircle2 className="w-2.5 h-2.5" />
                   Verified
                 </span>
-                {onClose && (
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="text-[10px] font-semibold text-secondary hover:text-secondary/80"
-                  >
-                    Edit
-                  </button>
-                )}
               </div>
             ) : (
               <p className="text-white/45 text-[10px]">Step {formStep} of 2 — {formStep === 1 ? "Basic Details" : "Tell Us More"}</p>
@@ -422,11 +436,6 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
                 style={{ width: formStep === s ? "20px" : "8px", background: formStep >= s ? "#d97706" : "rgba(255,255,255,0.2)" }} />
             ))}
           </div>
-          {onClose && (
-            <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all ml-1">
-              <X className="w-4 h-4" />
-            </button>
-          )}
         </div>
       </div>
 
@@ -436,16 +445,14 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
           <motion.form key="step1" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
             onSubmit={handleStep1Next} noValidate className="space-y-2">
 
-            {/* Role — locked to this page */}
             <div>
               <label className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">I am a</label>
-              <div
-                className="w-full h-10 rounded-lg px-3 flex items-center text-[13px] font-medium select-none"
-                style={{ ...iStyle, opacity: 0.85, cursor: "default" }}
-                aria-disabled="true"
-              >
-                <span>{role === "student" ? "🎓 Student / Parent" : "👩‍🏫 Teacher (Self-Nomination)"}</span>
-              </div>
+              <CustomSelect
+                value={ROLE_LABELS[role]}
+                onChange={(label) => handleRoleChange(ROLE_BY_LABEL[label])}
+                options={Object.values(ROLE_LABELS)}
+                placeholder="Select who you are"
+              />
             </div>
 
             {/* Student Step 1 */}
@@ -493,7 +500,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
             {role === "student" && (
               <div className="space-y-2">
                 <FormTextarea label="What's special about this teacher?" value={sf.specialThing} onChange={(v) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
-                <FormTextarea label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." required rows={3} />
+                <FormTextarea label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." optional rows={3} />
                 <input style={iStyle} className={iCls} placeholder="Awards / Recognition (Optional)" value={sf.awardsRecognition} onChange={e => setSF("awardsRecognition", e.target.value)} />
                 <input style={iStyle} className={iCls} placeholder="Teacher's LinkedIn / Social Media (Optional)" value={sf.teacherSocial} onChange={e => setSF("teacherSocial", e.target.value)} />
                 <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
