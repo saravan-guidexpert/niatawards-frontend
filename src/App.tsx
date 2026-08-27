@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, type ComponentType } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { captureUtmParams } from "./lib/utm";
@@ -11,13 +11,44 @@ import { Loader2 } from "lucide-react";
 // Eagerly load landing page only
 import Index from "./pages/Index.tsx";
 
+const RELOAD_FLAG = "niat_chunk_reload";
+
+const readFlag = () => {
+  try { return sessionStorage.getItem(RELOAD_FLAG); } catch { return null; }
+};
+const writeFlag = (value: string | null) => {
+  try {
+    if (value === null) sessionStorage.removeItem(RELOAD_FLAG);
+    else sessionStorage.setItem(RELOAD_FLAG, value);
+  } catch { /* private mode: fall through to the thrown error */ }
+};
+
+/**
+ * A tab left open across a deploy still asks for the previous build's chunk
+ * hashes, which 404 once the new deployment goes live. Reload once to pick up
+ * the current index.html rather than crashing the route mid-nomination.
+ */
+const lazyRoute = <T extends ComponentType<never>>(load: () => Promise<{ default: T }>) =>
+  lazy(async () => {
+    try {
+      const mod = await load();
+      writeFlag(null);
+      return mod;
+    } catch (err) {
+      if (readFlag()) throw err;
+      writeFlag("1");
+      window.location.reload();
+      return new Promise<never>(() => {});
+    }
+  });
+
 // Lazy load everything else — reduces initial bundle significantly
-const NominatePage    = lazy(() => import("./pages/NominatePage.tsx"));
-const ThankYouPage    = lazy(() => import("./pages/ThankYouPage.tsx"));
-const AdminPage       = lazy(() => import("./pages/AdminPage.tsx"));
-const AdminLoginPage  = lazy(() => import("./pages/AdminLoginPage.tsx"));
-const LoginPage       = lazy(() => import("./pages/LoginPage.tsx"));
-const NotFound        = lazy(() => import("./pages/NotFound.tsx"));
+const NominatePage    = lazyRoute(() => import("./pages/NominatePage.tsx"));
+const ThankYouPage    = lazyRoute(() => import("./pages/ThankYouPage.tsx"));
+const AdminPage       = lazyRoute(() => import("./pages/AdminPage.tsx"));
+const AdminLoginPage  = lazyRoute(() => import("./pages/AdminLoginPage.tsx"));
+const LoginPage       = lazyRoute(() => import("./pages/LoginPage.tsx"));
+const NotFound        = lazyRoute(() => import("./pages/NotFound.tsx"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-gradient-dark">
