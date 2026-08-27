@@ -60,7 +60,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!pendingPhone) return { success: false, error: "Please request an OTP first" };
 
     try {
-      await apiVerifyOtp(pendingPhone, otp, draftToken);
+      const result = await apiVerifyOtp(pendingPhone, otp, draftToken);
+      if (result.success === false || result.verified === false) {
+        return { success: false, error: result.message || "Invalid OTP. Please try again." };
+      }
       setUser({ phone: pendingPhone, role: "student", name: name?.trim() || undefined });
       trackFunnel("otp_verified", pendingPhone);
       setPendingPhone(null);

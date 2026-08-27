@@ -393,7 +393,26 @@ const InlineNominationForm = ({ userName = "", userPhone = "", onClose, embedded
           </div>
           <div>
             <p className="text-white font-bold text-[13px]">Hey {name.split(" ")[0] || "there"}! 👋</p>
-            <p className="text-white/45 text-[10px]">Step {formStep} of 2 — {formStep === 1 ? "Basic Details" : "Tell Us More"}</p>
+            {phone ? (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-white/55 text-[10px] tabular-nums">+91 {phone}</span>
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-green-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-green-400">
+                  <CheckCircle2 className="w-2.5 h-2.5" />
+                  Verified
+                </span>
+                {onClose && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="text-[10px] font-semibold text-secondary hover:text-secondary/80"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="text-white/45 text-[10px]">Step {formStep} of 2 — {formStep === 1 ? "Basic Details" : "Tell Us More"}</p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -44,13 +44,13 @@ const adminHeaders = () => {
 };
 
 export const apiSendOtp = (phone: string, resend = false) =>
-  request<{ success: boolean }>("/api/otp/send", {
+  request<{ success: boolean; message?: string }>("/api/otp/send", {
     method: "POST",
     body: JSON.stringify({ phone, ...(resend ? { resend: true } : {}) }),
   });
 
 export const apiVerifyOtp = (phone: string, otp: string, draftToken?: string) =>
-  request<{ success: boolean }>("/api/otp/verify", {
+  request<{ success: boolean; message?: string; verified?: boolean }>("/api/otp/verify", {
     method: "POST",
     body: JSON.stringify({
       phone,

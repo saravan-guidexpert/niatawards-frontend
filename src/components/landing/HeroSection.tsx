@@ -3,6 +3,7 @@ import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion"
 import { Star, ArrowRight, Calendar, Sparkles, User, Phone, Loader2, CheckCircle2, ChevronDown, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import InlineNominationForm from "@/components/nomination/InlineNominationForm";
+import MobileOtpField from "@/components/nomination/MobileOtpField";
 import { createNominationDraft, updateNominationDraft } from "@/lib/api";
 import { getDraftSession, saveDraftSession } from "@/lib/nominationDraft";
 
@@ -128,7 +129,7 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
   }, [isAuthenticated]);
 
   const handleSend = async (resend = false) => {
-    if (!name.trim()) { toast({ title: "Please enter your name", variant: "destructive" }); return; }
+    if (name.trim().length < 2) { toast({ title: "Please enter your name", variant: "destructive" }); return; }
     if (phone.replace(/\D/g, "").length < 10) { toast({ title: "Enter a valid 10-digit number", variant: "destructive" }); return; }
     if (resend && resendIn > 0) return;
     setLoading(true);
@@ -209,7 +210,7 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
                 onKeyDown={(e: any) => e.key === "Enter" && handleSend()}
                 type="tel" inputMode="numeric" maxLength={10} placeholder="10-digit number" />
               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                id="btn-hero-send-otp" onClick={() => handleSend()} disabled={loading}
+                id="btn-hero-send-otp" onClick={() => handleSend()} disabled={loading || name.trim().length < 2 || phone.length < 10}
                 className="w-full h-12 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 relative overflow-hidden disabled:opacity-60 mt-1"
                 style={{ background: "linear-gradient(135deg, #9B2020, #7A1515)", color: "#fff", boxShadow: "0 4px 20px rgba(107,18,18,0.5)" }}>
                 <motion.div animate={{ x: [-200, 400] }} transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 4 }}
@@ -236,17 +237,12 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
                 <button id="btn-hero-otp-back" onClick={() => { setStep("form"); setOtp(""); }}
                   className="text-[11px] font-semibold text-secondary hover:text-secondary/80 flex-shrink-0">Edit</button>
               </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-white/80 mb-1.5 uppercase tracking-wider">Enter 6-Digit OTP</label>
-                <input value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  onKeyDown={e => e.key === "Enter" && handleVerify()}
-                  type="tel" inputMode="numeric" maxLength={6} autoFocus
-                  placeholder="· · · · · ·"
-                  className="w-full h-14 rounded-xl text-center text-2xl font-bold tracking-[0.6em] text-white placeholder:text-white/20 focus:outline-none transition-all"
-                  style={{ background: "rgba(255,255,255,0.1)", border: "1.5px solid rgba(255,255,255,0.25)" }}
-                  onFocus={e => e.target.style.borderColor = "rgba(217,119,6,0.7)"}
-                  onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.25)"} />
-              </div>
+              <MobileOtpField
+                value={otp}
+                onChange={setOtp}
+                disabled={loading}
+                onEnter={handleVerify}
+              />
               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
                 id="btn-hero-verify-otp" onClick={handleVerify} disabled={loading || otp.length < 6}
                 className="w-full h-12 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 disabled:opacity-50"

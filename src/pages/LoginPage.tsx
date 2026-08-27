@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Phone, ArrowRight, Shield, User, Loader2, ChevronLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import MobileOtpField from "@/components/nomination/MobileOtpField";
 
 const LoginPage = () => {
   const [step, setStep] = useState<"phone" | "otp" | "name">("phone");
@@ -11,18 +12,30 @@ const LoginPage = () => {
   const [otp, setOtp] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendIn, setResendIn] = useState(0);
   const { sendOtp, verifyOtp, setUserName } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from || "/";
 
-  const handleSendOtp = async () => {
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const handleSendOtp = async (resend = false) => {
     if (phone.length < 10) { toast({ title: "Enter a valid 10-digit number", variant: "destructive" }); return; }
+    if (resend && resendIn > 0) return;
     setLoading(true);
-    const result = await sendOtp(phone);
+    const result = await sendOtp(phone, resend);
     setLoading(false);
-    if (result.success) setStep("otp");
+    if (result.success) {
+      setResendIn(30);
+      setStep("otp");
+      if (resend) toast({ title: `OTP resent to +91 ${phone}` });
+    }
     else toast({ title: result.error || "Failed to send OTP", variant: "destructive" });
   };
 
@@ -84,7 +97,7 @@ const LoginPage = () => {
                       onKeyDown={e => e.key === "Enter" && handleSendOtp()}
                       className="flex-1 h-12 px-4 rounded-xl bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-base focus:outline-none focus:border-secondary/60 transition-all" />
                   </div>
-                  <button id="btn-login-send-otp" onClick={handleSendOtp} disabled={phone.length < 10 || loading}
+                  <button id="btn-login-send-otp" onClick={() => handleSendOtp()} disabled={phone.length < 10 || loading}
                     className="w-full h-12 rounded-xl bg-gradient-to-r from-[#9B2020] to-[#7A1515] text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-50 transition-all">
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> Send OTP</>}
                   </button>
@@ -106,16 +119,19 @@ const LoginPage = () => {
                   <span className="text-sm text-white/60">Sent to <span className="text-white font-semibold">+91 {phone}</span></span>
                 </div>
                 <div className="space-y-3">
-                  <input type="tel" inputMode="numeric" placeholder="Enter 6-digit OTP" maxLength={6} autoFocus
-                    value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    onKeyDown={e => e.key === "Enter" && handleVerifyOtp()}
-                    className="w-full h-14 px-4 rounded-xl bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-2xl font-bold tracking-[0.5em] text-center focus:outline-none focus:border-secondary/60 transition-all" />
+                  <MobileOtpField
+                    value={otp}
+                    onChange={setOtp}
+                    disabled={loading}
+                    onEnter={handleVerifyOtp}
+                  />
                   <button id="btn-login-verify-otp" onClick={handleVerifyOtp} disabled={otp.length < 6 || loading}
                     className="w-full h-12 rounded-xl bg-gradient-to-r from-[#9B2020] to-[#7A1515] text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-50">
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> Verify</>}
                   </button>
-                  <button id="btn-login-resend-otp" onClick={handleSendOtp} className="w-full text-center text-sm text-white/30 hover:text-secondary transition-colors min-h-[44px] flex items-center justify-center">
-                    Didn't receive? Resend OTP
+                  <button id="btn-login-resend-otp" onClick={() => handleSendOtp(true)} disabled={loading || resendIn > 0}
+                    className="w-full text-center text-sm text-white/30 hover:text-secondary disabled:hover:text-white/30 disabled:cursor-not-allowed transition-colors min-h-[44px] flex items-center justify-center">
+                    {resendIn > 0 ? `Resend OTP in ${resendIn}s` : "Didn't receive? Resend OTP"}
                   </button>
                 </div>
               </motion.div>
@@ -127,11 +143,21 @@ const LoginPage = () => {
                   <User className="w-5 h-5 text-secondary" />
                   <h2 className="font-heading text-lg font-semibold text-white">Your name</h2>
                 </div>
-                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2.5 mb-5">
-                  <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
-                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-green-400"><polyline points="20 6 9 17 4 12"/></svg>
+                <div className="flex items-center justify-between gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2.5 mb-5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-green-400"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <span className="text-xs text-white/60 truncate">Verified · +91 {phone}</span>
                   </div>
-                  <span className="text-xs text-white/60">Phone verified · +91 {phone}</span>
+                  <button
+                    id="btn-login-verified-edit"
+                    type="button"
+                    onClick={() => { setStep("phone"); setOtp(""); }}
+                    className="text-[11px] font-semibold text-secondary hover:text-secondary/80 flex-shrink-0"
+                  >
+                    Edit
+                  </button>
                 </div>
                 <div className="space-y-3">
                   <input placeholder="e.g. Rahul Sharma" value={name} onChange={e => setName(e.target.value)} autoFocus
