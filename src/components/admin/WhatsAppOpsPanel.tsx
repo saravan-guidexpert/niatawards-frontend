@@ -128,11 +128,11 @@ const MetricCard = ({
 const WhatsAppOpsPanel = () => {
   const { toast } = useToast();
   const superAdmin = isSuperAdmin();
-  const [tab, setTab] = useState<OpsTab>("overview");
+  const [tab, setTab] = useState<OpsTab>("messages");
   const [date, setDate] = useState<Date>(() => new Date());
   const dateKey = istDayKey(date);
   const [live, setLive] = useState(true);
-  const [kind, setKind] = useState("");
+  const [kind, setKind] = useState("student_nominate");
   const [status, setStatus] = useState("");
   const [attemptNumber, setAttemptNumber] = useState("");
   const [phoneFilter, setPhoneFilter] = useState("");
@@ -148,7 +148,7 @@ const WhatsAppOpsPanel = () => {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
   const [testPhone, setTestPhone] = useState("");
-  const [testKind, setTestKind] = useState("test");
+  const [testKind, setTestKind] = useState("student_nominate");
   const [testParams, setTestParams] = useState("");
   const [sending, setSending] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
@@ -216,6 +216,10 @@ const WhatsAppOpsPanel = () => {
   const totals = overview?.totals || EMPTY_TOTALS;
   const stages = overview?.byAttempt || [];
   const kinds = overview?.kinds || [];
+  const kindOptions = useMemo(
+    () => [...new Set(["student_nominate", "teacher_submit", ...kinds])],
+    [kinds]
+  );
   const nextDue = overview?.nextPromotionDueAt || null;
 
   const handleTestSend = async () => {
@@ -364,6 +368,28 @@ const WhatsAppOpsPanel = () => {
         </nav>
       </div>
 
+      {tab !== "settings" ? (
+        <div className="px-4 sm:px-6 mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setKind("")}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${kind === "" ? "border-secondary/40 bg-secondary/15 text-secondary" : "border-white/10 text-primary-foreground/50"}`}
+          >
+            All templates
+          </button>
+          {kindOptions.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${kind === k ? "border-secondary/40 bg-secondary/15 text-secondary" : "border-white/10 text-primary-foreground/50"}`}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {meta?.envHints?.length ? (
         <div className="px-4 sm:px-6 mt-4">
           <details className="group rounded-xl border border-white/10 bg-white/[0.03]">
@@ -403,26 +429,6 @@ const WhatsAppOpsPanel = () => {
       <div className="p-4 sm:p-6 space-y-5">
         {tab === "overview" && (
           <>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setKind("")}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${kind === "" ? "border-secondary/40 bg-secondary/15 text-secondary" : "border-white/10 text-primary-foreground/50"}`}
-              >
-                All templates
-              </button>
-              {kinds.map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setKind(k)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${kind === k ? "border-secondary/40 bg-secondary/15 text-secondary" : "border-white/10 text-primary-foreground/50"}`}
-                >
-                  {k}
-                </button>
-              ))}
-            </div>
-
             <div className="grid grid-cols-1 xl:grid-cols-[auto_1fr] gap-4">
               <div className="rounded-xl border border-white/10 bg-[#1a1a1a] p-3 w-fit">
                 <DarkCalendar mode="single" selected={date} onSelect={(d) => d && setDate(d)} />

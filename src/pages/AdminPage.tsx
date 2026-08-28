@@ -196,6 +196,40 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
+const WhatsAppStatusBadge = ({ n }: { n: any }) => {
+  if (n.type !== "student" || n.status === "draft") return null;
+  const value = String(n.whatsapp_status || "not_sent");
+  const styles: Record<string, string> = {
+    submitted: "bg-sky-500/15 text-sky-300 border-sky-500/25",
+    sent: "bg-sky-500/15 text-sky-300 border-sky-500/25",
+    queued: "bg-white/10 text-white/70 border-white/15",
+    delivered: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+    read: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+    failed: "bg-red-500/15 text-red-300 border-red-500/25",
+    retry_exhausted: "bg-red-500/15 text-red-300 border-red-500/25",
+    not_sent: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+  };
+  const labels: Record<string, string> = {
+    submitted: "WA submitted",
+    sent: "WA sent",
+    queued: "WA queued",
+    delivered: "WA delivered",
+    read: "WA read",
+    failed: "WA failed",
+    retry_exhausted: "WA exhausted",
+    not_sent: "WA not sent",
+  };
+  const attempt = n.whatsapp_attempt ? ` · #${n.whatsapp_attempt}` : "";
+  return (
+    <span
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${styles[value] || styles.not_sent}`}
+      title={n.whatsapp_error || labels[value] || value}
+    >
+      {labels[value] || `WA ${value}`}{attempt}
+    </span>
+  );
+};
+
 const NominationActions = ({
   n,
   updating,
@@ -273,6 +307,7 @@ const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: 
         <div className="flex flex-wrap items-center gap-2">
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
           <StatusBadge status={n.status} />
+          <WhatsAppStatusBadge n={n} />
           <UtmChip n={n} />
         </div>
         <h3 className="font-heading font-bold text-white text-base">{displayName(n)}</h3>
@@ -1094,6 +1129,7 @@ const AdminPage = () => {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
                         <StatusBadge status={n.status} />
+                        <WhatsAppStatusBadge n={n} />
                         <UtmChip n={n} />
                       </div>
                       <p className="text-xs text-primary-foreground/50">Stage: {stageLabel(n)}</p>
@@ -1122,7 +1158,7 @@ const AdminPage = () => {
                 <table className="w-full min-w-[820px]">
                   <thead>
                     <tr className="border-b border-primary-foreground/10">
-                      {["Type","Photo","Teacher / Applicant","Student","School","Campaign","Phones","Status","Stage","Date","Actions"].map(h => (
+                      {["Type","Photo","Teacher / Applicant","Student","School","Campaign","Phones","Status","WhatsApp","Stage","Date","Actions"].map(h => (
                         <th key={h} className="text-left text-[10px] sm:text-xs font-semibold text-primary-foreground/40 uppercase tracking-wider px-4 sm:px-5 py-3">{h}</th>
                       ))}
                     </tr>
@@ -1162,6 +1198,7 @@ const AdminPage = () => {
                           <PhonePair n={n} />
                         </td>
                         <td className="px-4 sm:px-5 py-3"><StatusBadge status={n.status} /></td>
+                        <td className="px-4 sm:px-5 py-3"><WhatsAppStatusBadge n={n} /></td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/50 whitespace-nowrap">{stageLabel(n)}</td>
                         <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/40 whitespace-nowrap">{new Date(n.created_at).toLocaleDateString("en-IN")}</td>
                         <td className="px-3 py-3">
