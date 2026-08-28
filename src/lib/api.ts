@@ -166,6 +166,12 @@ export const adminUpdateNomination = (id: string, payload: Record<string, unknow
     body: JSON.stringify(payload),
   });
 
+export const adminDeleteNomination = (id: string) =>
+  request<{ success: boolean; id: string }>(`/api/admin/nominations/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: adminHeaders(),
+  });
+
 export type PromoLink = {
   id: string;
   created_at: string;

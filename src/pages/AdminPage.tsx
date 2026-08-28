@@ -7,7 +7,7 @@ import {
   CheckCircle2, XCircle, Eye, BarChart3, ArrowLeft, Star,
   Loader2, RefreshCw, LogOut, Pencil, X, Save,
   Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2, Target, Shield,
-  Hourglass, MessageCircle
+  Hourglass, MessageCircle, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { adminLogout, isAdminLoggedIn } from "./AdminLoginPage";
-import { adminGetNominations, adminLogoutApi, adminUpdateNomination } from "@/lib/api";
+import { adminDeleteNomination, adminGetMe, adminGetNominations, adminLogoutApi, adminUpdateNomination } from "@/lib/api";
 import CampaignsPanel from "@/components/admin/CampaignsPanel";
 import DigitalMarketingPanel from "@/components/admin/DigitalMarketingPanel";
 import AccessManagementPanel from "@/components/admin/AccessManagementPanel";
@@ -28,9 +28,12 @@ import WhatsAppOpsPanel from "@/components/admin/WhatsAppOpsPanel";
 import {
   allowedAdminTabs,
   firstAllowedTab,
+  getAdminSession,
   getAdminUser,
   hasAdminPermission,
   isSuperAdmin,
+  PANEL_PERMISSIONS,
+  setAdminSession,
   type PanelPermission,
 } from "@/lib/adminSession";
 
@@ -166,13 +169,17 @@ const PhonePair = ({ n }: { n: any }) => (
   </div>
 );
 
-const UtmChip = ({ n, className = "" }: { n: any; className?: string }) => {
+const UtmChip = ({ n, className = "", compact = false }: { n: any; className?: string; compact?: boolean }) => {
   const source = utmSourceKey(n);
   const campaign = String(n?.utm_campaign || "").trim();
+  const full = campaign ? `${prettyUtm(source)} · ${campaign}` : prettyUtm(source);
   return (
-    <span className={`inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-full text-[10px] font-semibold border ${utmChipClass(source)} ${className}`}>
+    <span
+      title={full}
+      className={`inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-full text-[10px] font-semibold border ${utmChipClass(source)} ${className}`}
+    >
       <Globe2 className="w-2.5 h-2.5 flex-shrink-0" />
-      <span className="truncate">{prettyUtm(source)}{campaign ? ` · ${campaign}` : ""}</span>
+      <span className="truncate">{compact ? prettyUtm(source) : full}</span>
     </span>
   );
 };
@@ -196,8 +203,10 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const WhatsAppStatusBadge = ({ n }: { n: any }) => {
-  if (n.type !== "student" || n.status === "draft") return null;
+const WhatsAppStatusBadge = ({ n, compact = false }: { n: any; compact?: boolean }) => {
+  if (n.type !== "student" || n.status === "draft") {
+    return compact ? <span className="text-xs text-primary-foreground/30">—</span> : null;
+  }
   const value = String(n.whatsapp_status || "not_sent");
   const styles: Record<string, string> = {
     submitted: "bg-sky-500/15 text-sky-300 border-sky-500/25",
@@ -209,23 +218,34 @@ const WhatsAppStatusBadge = ({ n }: { n: any }) => {
     retry_exhausted: "bg-red-500/15 text-red-300 border-red-500/25",
     not_sent: "bg-amber-500/15 text-amber-300 border-amber-500/25",
   };
-  const labels: Record<string, string> = {
-    submitted: "WA submitted",
-    sent: "WA sent",
-    queued: "WA queued",
-    delivered: "WA delivered",
-    read: "WA read",
-    failed: "WA failed",
-    retry_exhausted: "WA exhausted",
-    not_sent: "WA not sent",
-  };
-  const attempt = n.whatsapp_attempt ? ` · #${n.whatsapp_attempt}` : "";
+  const labels: Record<string, string> = compact
+    ? {
+        submitted: "Submitted",
+        sent: "Sent",
+        queued: "Queued",
+        delivered: "Delivered",
+        read: "Read",
+        failed: "Failed",
+        retry_exhausted: "Exhausted",
+        not_sent: "Not sent",
+      }
+    : {
+        submitted: "WA submitted",
+        sent: "WA sent",
+        queued: "WA queued",
+        delivered: "WA delivered",
+        read: "WA read",
+        failed: "WA failed",
+        retry_exhausted: "WA exhausted",
+        not_sent: "WA not sent",
+      };
+  const attempt = n.whatsapp_attempt ? ` #${n.whatsapp_attempt}` : "";
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${styles[value] || styles.not_sent}`}
-      title={n.whatsapp_error || labels[value] || value}
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${styles[value] || styles.not_sent}`}
+      title={n.whatsapp_error || `${labels[value] || value}${attempt}`}
     >
-      {labels[value] || `WA ${value}`}{attempt}
+      {labels[value] || value}{attempt}
     </span>
   );
 };
@@ -234,59 +254,39 @@ const NominationActions = ({
   n,
   updating,
   stacked,
+  canDelete,
   onView,
-  onEdit,
-  onStatus,
+  onDelete,
 }: {
   n: any;
   updating: string | null;
   stacked?: boolean;
+  canDelete?: boolean;
   onView: () => void;
-  onEdit: () => void;
-  onStatus: (id: string, status: string) => void;
+  onDelete: () => void;
 }) => {
   const btn = stacked
     ? "flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-md text-xs font-semibold w-full min-h-[44px] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-    : "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed";
-  const busy = (status: string) => updating === n.id + status;
-  const disabled = updating?.startsWith(n.id) ?? false;
+    : "inline-flex items-center justify-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
+  const deleting = updating === n.id + "delete";
 
   return (
-    <div className={stacked ? "grid grid-cols-2 gap-1.5" : "flex flex-wrap items-center gap-1"}>
-      <button type="button" onClick={onView} className={`${btn} bg-white/5 hover:bg-white/10 text-white/50 hover:text-white`}>
-        <Eye className="w-3 h-3" /> View
+    <div className={stacked ? "grid grid-cols-2 gap-1.5" : "inline-flex items-center gap-1.5"}>
+      <button type="button" onClick={onView} className={`${btn} border border-white/10 bg-white/[0.06] text-white/90 hover:bg-white/12`}>
+        <Eye className="w-3.5 h-3.5" /> View
       </button>
-      <button type="button" onClick={onEdit} className={`${btn} bg-white/5 hover:bg-white/10 text-white/50 hover:text-white`}>
-        <Pencil className="w-3 h-3" /> Edit
-      </button>
-      {!isIncomplete(n) && n.status !== "shortlisted" && n.status !== "winner" && (
-        <button type="button" onClick={() => onStatus(n.id, "shortlisted")} disabled={disabled}
-          className={`${btn} bg-blue-500/15 hover:bg-blue-500/25 text-blue-400`} title="Shortlist this nomination">
-          {busy("shortlisted") ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-          Shortlist
+      {canDelete ? (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={deleting}
+          className={`${btn} border border-red-500/25 bg-red-500/10 text-red-400 hover:bg-red-500/20`}
+          title="Delete this nomination"
+        >
+          {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+          Delete
         </button>
-      )}
-      {n.status === "shortlisted" && (
-        <button type="button" onClick={() => onStatus(n.id, "pending")} disabled={disabled}
-          className={`${btn} bg-orange-500/15 hover:bg-orange-500/25 text-orange-400`} title="Remove from shortlist">
-          {busy("pending") ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-          Revoke
-        </button>
-      )}
-      {!isIncomplete(n) && n.status !== "winner" && (
-        <button type="button" onClick={() => onStatus(n.id, "winner")} disabled={disabled}
-          className={`${btn} bg-green-500/15 hover:bg-green-500/25 text-green-400`}>
-          {busy("winner") ? <Loader2 className="w-3 h-3 animate-spin" /> : <Award className="w-3 h-3" />}
-          Winner
-        </button>
-      )}
-      {!isIncomplete(n) && n.status !== "rejected" && n.status !== "winner" && (
-        <button type="button" onClick={() => onStatus(n.id, "rejected")} disabled={disabled}
-          className={`${btn} bg-red-500/15 hover:bg-red-500/25 text-red-400`}>
-          {busy("rejected") ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
-          Reject
-        </button>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -630,7 +630,7 @@ const AdminPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [nominations, setNominations] = useState<any[]>([]);
-  const adminUser = getAdminUser();
+  const [adminUser, setAdminUser] = useState(getAdminUser());
   const tabs = allowedAdminTabs(adminUser);
   const [activeTab, setActiveTab] = useState<PanelPermission | "access">(firstAllowedTab(adminUser));
   const [loading, setLoading] = useState(true);
@@ -652,10 +652,26 @@ const AdminPage = () => {
       navigate("/admin-login");
       return;
     }
-    const allowed = allowedAdminTabs(getAdminUser());
+    const current = getAdminUser();
+    const allowed = allowedAdminTabs(current);
     if (!allowed.includes(activeTab)) {
-      setActiveTab(firstAllowedTab(getAdminUser()));
+      setActiveTab(firstAllowedTab(current));
     }
+    const session = getAdminSession();
+    if (!session) return;
+    void adminGetMe()
+      .then(({ user }) => {
+        const role = user.role === "super_admin" ? "super_admin" as const : "staff" as const;
+        const nextUser = {
+          ...session.user,
+          ...user,
+          role,
+          permissions: role === "super_admin" ? [...PANEL_PERMISSIONS] : user.permissions,
+        };
+        setAdminSession({ token: session.token, user: nextUser });
+        setAdminUser(nextUser);
+      })
+      .catch(() => undefined);
   }, []);
 
   const handleLogout = () => {
@@ -702,22 +718,28 @@ const AdminPage = () => {
     if (isAdminLoggedIn()) fetchNominations();
   }, []);
 
-  const updateStatus = async (id: string, status: string) => {
-    setUpdating(id + status);
+  const handleEditSave = (updated: any) => {
+    setNominations(prev => prev.map(n => n.id === updated.id ? updated : n));
+  };
+
+  const deleteNomination = async (n: any) => {
+    if (adminUser?.role !== "super_admin") return;
+    const name = displayName(n);
+    const confirmed = window.confirm(`Delete this nomination for ${name}? This cannot be undone.`);
+    if (!confirmed) return;
+    setUpdating(n.id + "delete");
     try {
-      await adminUpdateNomination(id, { status });
-      setNominations(prev => prev.map(n => n.id === id ? { ...n, status } : n));
-      toast({ title: `✅ Marked as ${status}!` });
+      await adminDeleteNomination(n.id);
+      setNominations((prev) => prev.filter((row) => row.id !== n.id));
+      toast({ title: "Nomination deleted" });
     } catch (err: any) {
-      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     } finally {
       setUpdating(null);
     }
   };
 
-  const handleEditSave = (updated: any) => {
-    setNominations(prev => prev.map(n => n.id === updated.id ? updated : n));
-  };
+  const canDeleteNominations = adminUser?.role === "super_admin";
 
   const filtered = nominations.filter(n => {
     const q = search.toLowerCase();
@@ -875,7 +897,11 @@ const AdminPage = () => {
       </div>
 
       {/* Content */}
-      <div className="container py-6 sm:py-8 px-3 sm:px-4">
+      <div className={`py-6 sm:py-8 px-3 sm:px-4 ${
+        activeTab === "nominations"
+          ? "mx-auto w-full max-w-7xl xl:max-w-[1600px] 2xl:max-w-[1840px] 2xl:px-8"
+          : "container"
+      }`}>
         {loading && activeTab !== "access" && activeTab !== "whatsapp" ? (
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-8 h-8 text-secondary animate-spin" />
@@ -910,7 +936,7 @@ const AdminPage = () => {
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white"><span className="text-amber-400">{pending}</span> nomination{pending !== 1 ? "s" : ""} awaiting review</p>
-                  <p className="text-xs text-primary-foreground/40">Click <strong className="text-amber-400">Shortlist</strong> on any nomination below to mark it as shortlisted</p>
+                  <p className="text-xs text-primary-foreground/40">{pending} nomination{pending !== 1 ? "s" : ""} still in review</p>
                 </div>
               </div>
             )}
@@ -1147,30 +1173,49 @@ const AdminPage = () => {
                       n={n}
                       updating={updating}
                       stacked
+                      canDelete={canDeleteNominations}
                       onView={() => setViewingNoms([n])}
-                      onEdit={() => setEditingNom(n)}
-                      onStatus={updateStatus}
+                      onDelete={() => void deleteNomination(n)}
                     />
                   </div>
                 ))}
               </div>
-              <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full min-w-[820px]">
+              <div className="hidden lg:block px-2 pb-2">
+                <table className="w-full table-fixed">
+                  <colgroup>
+                    <col className="w-[72px]" />
+                    <col className="w-[72px]" />
+                    <col />
+                    <col />
+                    <col />
+                    <col className="w-[11%]" />
+                    <col className="w-[132px]" />
+                    <col className="w-[104px]" />
+                    <col className="w-[108px]" />
+                    <col className="w-[108px]" />
+                    <col className="w-[92px]" />
+                    <col className="w-[168px]" />
+                  </colgroup>
                   <thead>
                     <tr className="border-b border-primary-foreground/10">
                       {["Type","Photo","Teacher / Applicant","Student","School","Campaign","Phones","Status","WhatsApp","Stage","Date","Actions"].map(h => (
-                        <th key={h} className="text-left text-[10px] sm:text-xs font-semibold text-primary-foreground/40 uppercase tracking-wider px-4 sm:px-5 py-3">{h}</th>
+                        <th
+                          key={h}
+                          className={`text-[10px] sm:text-xs font-semibold text-primary-foreground/40 uppercase tracking-wider px-2.5 py-3 whitespace-nowrap ${
+                            h === "Actions" ? "text-right" : "text-left"
+                          }`}
+                        >{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map((n, i) => (
-                      <motion.tr key={n.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                        className="border-b border-primary-foreground/5 hover:bg-primary-foreground/5 transition-colors">
-                        <td className="px-4 sm:px-5 py-3">
+                      <motion.tr key={n.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 12) * 0.02 }}
+                        className="border-b border-primary-foreground/5 hover:bg-primary-foreground/[0.04] transition-colors">
+                        <td className="px-2.5 py-3 align-middle">
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
                         </td>
-                        <td className="px-4 sm:px-5 py-3">
+                        <td className="px-2.5 py-3 align-middle">
                           {n.photo_url ? (
                             <button
                               type="button"
@@ -1178,36 +1223,40 @@ const AdminPage = () => {
                               className="block"
                               title="View photo"
                             >
-                              <img src={n.photo_url} alt={displayName(n)} className="w-14 h-14 rounded-xl object-cover border border-white/10 hover:ring-2 hover:ring-white/30" />
+                              <img src={n.photo_url} alt={displayName(n)} className="w-11 h-11 rounded-lg object-cover border border-white/10 hover:ring-2 hover:ring-white/30" />
                             </button>
                           ) : (
-                            <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/20">
-                              <ImageOff className="w-5 h-5" />
+                            <div className="w-11 h-11 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/20">
+                              <ImageOff className="w-4 h-4" />
                             </div>
                           )}
                         </td>
-                        <td className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-medium text-primary-foreground min-w-[140px]">
-                          {displayName(n)}
+                        <td className="px-2.5 py-3 align-middle text-xs sm:text-sm font-medium text-primary-foreground min-w-0">
+                          <p className="truncate" title={displayName(n)}>{displayName(n)}</p>
                         </td>
-                        <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[100px] truncate">{n.student_name || "—"}</td>
-                        <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/60 max-w-[120px] truncate">{n.school_name || "—"}</td>
-                        <td className="px-4 sm:px-5 py-3 max-w-[190px]">
-                          <UtmChip n={n} />
+                        <td className="px-2.5 py-3 align-middle text-xs text-primary-foreground/60 min-w-0">
+                          <p className="truncate" title={n.student_name || ""}>{n.student_name || "—"}</p>
                         </td>
-                        <td className="px-4 sm:px-5 py-3 whitespace-nowrap">
+                        <td className="px-2.5 py-3 align-middle text-xs text-primary-foreground/60 min-w-0">
+                          <p className="truncate" title={n.school_name || ""}>{n.school_name || "—"}</p>
+                        </td>
+                        <td className="px-2.5 py-3 align-middle min-w-0">
+                          <UtmChip n={n} compact />
+                        </td>
+                        <td className="px-2.5 py-3 align-middle">
                           <PhonePair n={n} />
                         </td>
-                        <td className="px-4 sm:px-5 py-3"><StatusBadge status={n.status} /></td>
-                        <td className="px-4 sm:px-5 py-3"><WhatsAppStatusBadge n={n} /></td>
-                        <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/50 whitespace-nowrap">{stageLabel(n)}</td>
-                        <td className="px-4 sm:px-5 py-3 text-xs text-primary-foreground/40 whitespace-nowrap">{new Date(n.created_at).toLocaleDateString("en-IN")}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-2.5 py-3 align-middle"><StatusBadge status={n.status} /></td>
+                        <td className="px-2.5 py-3 align-middle"><WhatsAppStatusBadge n={n} compact /></td>
+                        <td className="px-2.5 py-3 align-middle text-xs text-primary-foreground/55 truncate" title={stageLabel(n)}>{stageLabel(n)}</td>
+                        <td className="px-2.5 py-3 align-middle text-xs text-primary-foreground/40 whitespace-nowrap">{n.created_at ? formatDateIn(n.created_at) : "—"}</td>
+                        <td className="px-2.5 py-3 align-middle text-right">
                           <NominationActions
                             n={n}
                             updating={updating}
+                            canDelete={canDeleteNominations}
                             onView={() => setViewingNoms([n])}
-                            onEdit={() => setEditingNom(n)}
-                            onStatus={updateStatus}
+                            onDelete={() => void deleteNomination(n)}
                           />
                         </td>
                       </motion.tr>
