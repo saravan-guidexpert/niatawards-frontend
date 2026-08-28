@@ -543,8 +543,6 @@ const WhatsAppOpsPanel = () => {
           </>
         )}
 
-        )}
-
         {(tab === "messages" || tab === "failures" || tab === "logs") && (
           <>
             {tab !== "failures" && (
