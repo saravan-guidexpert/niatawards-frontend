@@ -14,10 +14,11 @@ const slotClass =
 
 const MobileOtpField = ({ value, onChange, disabled, autoFocus = true, onEnter }: Props) => (
   <div>
-    <label className="block text-[12px] font-semibold text-white/80 mb-2 uppercase tracking-wider">
+    <label htmlFor="otp-input" className="block text-[12px] font-semibold text-white/80 mb-2 uppercase tracking-wider">
       Enter 6-Digit OTP
     </label>
     <InputOTP
+      id="otp-input"
       maxLength={6}
       value={value}
       onChange={(next) => onChange(next.replace(/\D/g, "").slice(0, 6))}

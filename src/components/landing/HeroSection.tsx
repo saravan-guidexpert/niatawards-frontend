@@ -109,9 +109,9 @@ const HeroCountdown = () => {
   );
 };
 
-const Field = ({ label, icon: Icon, prefix, value, onChange, onKeyDown, placeholder, type = "text", inputMode, maxLength, autoFocus }: any) => (
+const Field = ({ label, id, icon: Icon, prefix, value, onChange, onKeyDown, placeholder, type = "text", inputMode, maxLength, autoFocus }: any) => (
   <div>
-    <label className="block text-[12px] font-semibold text-white/80 mb-1.5 uppercase tracking-wider">{label}</label>
+    <label htmlFor={id} className="block text-[12px] font-semibold text-white/80 mb-1.5 uppercase tracking-wider">{label}</label>
     <div className="flex items-center gap-0 rounded-xl overflow-hidden border border-white/25 bg-white/10 focus-within:border-secondary/70 focus-within:bg-white/15 transition-all duration-200">
       {prefix && (
         <div className="px-3.5 flex items-center self-stretch border-r border-white/15 bg-white/5 flex-shrink-0">
@@ -120,10 +120,10 @@ const Field = ({ label, icon: Icon, prefix, value, onChange, onKeyDown, placehol
       )}
       {Icon && !prefix && (
         <div className="pl-3.5 flex items-center flex-shrink-0">
-          <Icon className="w-4 h-4 text-white/50" />
+          <Icon className="w-4 h-4 text-white/50" aria-hidden="true" />
         </div>
       )}
-      <input value={value} onChange={onChange} onKeyDown={onKeyDown} type={type} inputMode={inputMode}
+      <input id={id} value={value} onChange={onChange} onKeyDown={onKeyDown} type={type} inputMode={inputMode}
         maxLength={maxLength} autoFocus={autoFocus} placeholder={placeholder}
         className="flex-1 h-12 px-3.5 bg-transparent text-white text-[15px] font-medium placeholder:text-white/35 focus:outline-none" />
     </div>
@@ -257,11 +257,11 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
 
         {step === "form" ? (
           <div key="form" className="space-y-3.5 niat-step-form">
-            <Field label="Your Full Name" icon={User} value={name}
+            <Field id="hero-nominator-name" label="Your Full Name" icon={User} value={name}
               onChange={(e: any) => setName(e.target.value)}
               onKeyDown={(e: any) => e.key === "Enter" && handleSend()}
               placeholder="e.g. Rahul Sharma" autoFocus />
-            <Field label="Mobile Number" prefix="+91" value={phone}
+            <Field id="hero-nominator-phone" label="Mobile Number" prefix="+91" value={phone}
               onChange={(e: any) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
               onKeyDown={(e: any) => e.key === "Enter" && handleSend()}
               type="tel" inputMode="numeric" maxLength={10} placeholder="10-digit number" />
@@ -272,8 +272,8 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
               <div className="niat-shine absolute inset-0 w-20 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none" />
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Phone className="w-4 h-4" /> Get OTP &amp; Nominate</>}
             </button>
-            <p className="text-center text-[11px] text-white/30 pt-0.5">
-              By continuing you agree to our <a href="https://www.ccbp.in/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="text-white/50 underline">Terms</a> &amp; <a href="https://www.ccbp.in/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-white/50 underline">Privacy Policy</a>
+            <p className="text-center text-[11px] text-white/50 pt-0.5">
+              By continuing you agree to our <a href="https://www.ccbp.in/terms-and-conditions" target="_blank" rel="noopener noreferrer" className="text-white/70 underline">Terms</a> &amp; <a href="https://www.ccbp.in/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-white/70 underline">Privacy Policy</a>
             </p>
           </div>
         ) : (
@@ -381,7 +381,7 @@ const HeroSection = ({ lockedRole = "student" }: { lockedRole?: "student" | "tea
 
           <div className="min-w-0 w-full">
             <QuickNominateCard lockedRole={lockedRole} />
-            <p className="text-center text-white/40 text-sm mt-4">
+            <p className="text-center text-white/50 text-sm mt-4">
               {lockedRole === "teacher" ? (
                 <>Nominating a teacher instead?{" "}
                   <Link to="/nominate-student" className="text-secondary hover:text-secondary/80 font-medium">

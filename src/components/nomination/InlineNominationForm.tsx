@@ -17,8 +17,8 @@ declare function gtag(...args: any[]): void;
 const track = (event: string, params?: Record<string, any>) => { try { gtag("event", event, params); } catch {} };
 
 // ── Shared dropdown — defined outside any form component so it never re-mounts ──
-export const CustomSelect = ({ value, onChange, options, placeholder }: {
-  value: string; onChange: (v: string) => void; options: string[]; placeholder: string;
+export const CustomSelect = ({ value, onChange, options, placeholder, id }: {
+  value: string; onChange: (v: string) => void; options: string[]; placeholder: string; id?: string;
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -34,7 +34,7 @@ export const CustomSelect = ({ value, onChange, options, placeholder }: {
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)}
+      <button type="button" id={id} onClick={() => setOpen(!open)}
         className="w-full h-10 rounded-lg px-3 flex items-center justify-between text-[13px] font-medium focus:outline-none transition-all"
         style={{ ...iStyle, color: value ? "#fff" : "rgba(255,255,255,0.4)" }}>
         <span className="truncate">{value || placeholder}</span>
@@ -57,8 +57,9 @@ export const CustomSelect = ({ value, onChange, options, placeholder }: {
 };
 
 const FormTextarea = ({
-  label, value, onChange, placeholder, required, optional, rows = 3,
+  id, label, value, onChange, placeholder, required, optional, rows = 3,
 }: {
+  id?: string;
   label?: string;
   value: string;
   onChange: (v: string) => void;
@@ -69,12 +70,13 @@ const FormTextarea = ({
 }) => (
   <div>
     {label && (
-      <label className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">
+      <label htmlFor={id} className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">
         {label}
-        {optional && <span className="text-white/35 font-normal normal-case"> (optional)</span>}
+        {optional && <span className="text-white/50 font-normal normal-case"> (optional)</span>}
       </label>
     )}
     <textarea
+      id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       rows={rows}
@@ -454,8 +456,9 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
             onSubmit={handleStep1Next} noValidate className="space-y-2">
 
             <div>
-              <label className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">I am a</label>
+              <label htmlFor="nom-role" className="block text-[11px] font-semibold text-white/60 mb-1 uppercase tracking-wider">I am a</label>
               <CustomSelect
+                id="nom-role"
                 value={ROLE_LABELS[role]}
                 onChange={(label) => handleRoleChange(ROLE_BY_LABEL[label])}
                 options={Object.values(ROLE_LABELS)}
@@ -466,12 +469,21 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
             {/* Student Step 1 */}
             {role === "student" && (
               <div className="space-y-2">
-                <input style={iStyle} className={iCls} placeholder="Your Full Name" required value={sf.studentName} onChange={e => setSF("studentName", e.target.value)} />
-                <CustomSelect value={sf.currentEducation} onChange={v => setSF("currentEducation", v)} options={educationOptions} placeholder="Current Education Level" />
-                <input style={iStyle} className={iCls} placeholder="School / College Name" required value={sf.schoolName} onChange={e => setSF("schoolName", e.target.value)} />
+                <label htmlFor="nom-student-name" className="sr-only">Your Full Name</label>
+                <input id="nom-student-name" style={iStyle} className={iCls} placeholder="Your Full Name" required value={sf.studentName} onChange={e => setSF("studentName", e.target.value)} />
+                <label htmlFor="nom-student-education" className="sr-only">Current Education Level</label>
+                <CustomSelect id="nom-student-education" value={sf.currentEducation} onChange={v => setSF("currentEducation", v)} options={educationOptions} placeholder="Current Education Level" />
+                <label htmlFor="nom-school-name" className="sr-only">School / College Name</label>
+                <input id="nom-school-name" style={iStyle} className={iCls} placeholder="School / College Name" required value={sf.schoolName} onChange={e => setSF("schoolName", e.target.value)} />
                 <div className="grid grid-cols-2 gap-2">
-                  <input style={iStyle} className={iCls} placeholder="Teacher Full Name" required value={sf.teacherName} onChange={e => setSF("teacherName", e.target.value)} />
-                  <input
+                  <div>
+                    <label htmlFor="nom-teacher-name" className="sr-only">Teacher Full Name</label>
+                    <input id="nom-teacher-name" style={iStyle} className={iCls} placeholder="Teacher Full Name" required value={sf.teacherName} onChange={e => setSF("teacherName", e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor="nom-teacher-phone" className="sr-only">Teacher's Phone</label>
+                    <input
+                    id="nom-teacher-phone"
                     style={{
                       ...iStyle,
                       ...(teacherPhoneMatchesStudent(sf.teacherPhone, phone)
@@ -486,25 +498,37 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
                     value={sf.teacherPhone}
                     onChange={e => setSF("teacherPhone", e.target.value.replace(/\D/g, "").slice(0, 10))}
                   />
+                  </div>
                 </div>
                 {teacherPhoneMatchesStudent(sf.teacherPhone, phone) ? (
                   <p className="text-[11px] font-medium text-red-400">{TEACHER_PHONE_SAME_AS_STUDENT_MSG}</p>
                 ) : null}
-                <input style={iStyle} className={iCls} placeholder="Teaching Subject" required value={sf.teachingSubject} onChange={e => setSF("teachingSubject", e.target.value)} />
+                <label htmlFor="nom-teaching-subject" className="sr-only">Teaching Subject</label>
+                <input id="nom-teaching-subject" style={iStyle} className={iCls} placeholder="Teaching Subject" required value={sf.teachingSubject} onChange={e => setSF("teachingSubject", e.target.value)} />
               </div>
             )}
 
             {/* Teacher Step 1 */}
             {role === "teacher" && (
               <div className="space-y-2">
-                <input style={iStyle} className={iCls} placeholder="Your Full Name" required value={tf.fullName} onChange={e => setTF("fullName", e.target.value)} />
-                <input style={iStyle} className={iCls} placeholder="School / College Name" required value={tf.school} onChange={e => setTF("school", e.target.value)} />
-                <input style={iStyle} className={iCls} placeholder="+91 Phone Number" type="tel" inputMode="numeric" required value={tf.phone} onChange={e => setTF("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} />
+                <label htmlFor="nom-self-name" className="sr-only">Your Full Name</label>
+                <input id="nom-self-name" style={iStyle} className={iCls} placeholder="Your Full Name" required value={tf.fullName} onChange={e => setTF("fullName", e.target.value)} />
+                <label htmlFor="nom-self-school" className="sr-only">School / College Name</label>
+                <input id="nom-self-school" style={iStyle} className={iCls} placeholder="School / College Name" required value={tf.school} onChange={e => setTF("school", e.target.value)} />
+                <label htmlFor="nom-self-phone" className="sr-only">Phone Number</label>
+                <input id="nom-self-phone" style={iStyle} className={iCls} placeholder="+91 Phone Number" type="tel" inputMode="numeric" required value={tf.phone} onChange={e => setTF("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} />
                 <div className="grid grid-cols-2 gap-2">
-                  <input style={iStyle} className={iCls} placeholder="Subject" required value={tf.subject} onChange={e => setTF("subject", e.target.value)} />
-                  <input style={iStyle} className={iCls} placeholder="Years of Exp." type="number" min="0" max="50" required value={tf.experience} onChange={e => setTF("experience", e.target.value)} />
+                  <div>
+                    <label htmlFor="nom-self-subject" className="sr-only">Subject</label>
+                    <input id="nom-self-subject" style={iStyle} className={iCls} placeholder="Subject" required value={tf.subject} onChange={e => setTF("subject", e.target.value)} />
+                  </div>
+                  <div>
+                    <label htmlFor="nom-self-experience" className="sr-only">Years of Experience</label>
+                    <input id="nom-self-experience" style={iStyle} className={iCls} placeholder="Years of Exp." type="number" min="0" max="50" required value={tf.experience} onChange={e => setTF("experience", e.target.value)} />
+                  </div>
                 </div>
-                <CustomSelect value={tf.classesTeaching} onChange={v => setTF("classesTeaching", v)} options={classesTeaching} placeholder="Which Class Are You Teaching?" />
+                <label htmlFor="nom-self-classes" className="sr-only">Which Class Are You Teaching?</label>
+                <CustomSelect id="nom-self-classes" value={tf.classesTeaching} onChange={v => setTF("classesTeaching", v)} options={classesTeaching} placeholder="Which Class Are You Teaching?" />
               </div>
             )}
 
@@ -528,10 +552,12 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
 
             {role === "student" && (
               <div className="space-y-2">
-                <FormTextarea label="What's special about this teacher?" value={sf.specialThing} onChange={(v) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
-                <FormTextarea label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." optional rows={3} />
-                <input style={iStyle} className={iCls} placeholder="Awards / Recognition (Optional)" value={sf.awardsRecognition} onChange={e => setSF("awardsRecognition", e.target.value)} />
-                <input style={iStyle} className={iCls} placeholder="Teacher's LinkedIn / Social Media (Optional)" value={sf.teacherSocial} onChange={e => setSF("teacherSocial", e.target.value)} />
+                <FormTextarea id="nom-special-thing" label="What's special about this teacher?" value={sf.specialThing} onChange={(v) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
+                <FormTextarea id="nom-impact-story" label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." optional rows={3} />
+                <label htmlFor="nom-awards" className="sr-only">Awards / Recognition (Optional)</label>
+                <input id="nom-awards" style={iStyle} className={iCls} placeholder="Awards / Recognition (Optional)" value={sf.awardsRecognition} onChange={e => setSF("awardsRecognition", e.target.value)} />
+                <label htmlFor="nom-teacher-social" className="sr-only">Teacher's LinkedIn / Social Media (Optional)</label>
+                <input id="nom-teacher-social" style={iStyle} className={iCls} placeholder="Teacher's LinkedIn / Social Media (Optional)" value={sf.teacherSocial} onChange={e => setSF("teacherSocial", e.target.value)} />
                 <Suspense fallback={<PhotoUploadFallback />}>
                   <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
                 </Suspense>
@@ -540,7 +566,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
 
             {role === "teacher" && (
               <div className="space-y-2">
-                <FormTextarea label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
+                <FormTextarea id="nom-self-impact" label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
                 <Suspense fallback={<PhotoUploadFallback />}>
                   <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
                 </Suspense>

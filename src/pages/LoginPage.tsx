@@ -85,14 +85,16 @@ const LoginPage = () => {
             {step === "phone" && (
               <motion.div key="phone" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}>
                 <div className="flex items-center gap-2 mb-1">
-                  <Phone className="w-5 h-5 text-secondary" />
-                  <h2 className="font-heading text-lg font-semibold text-white">Phone number</h2>
+                  <Phone className="w-5 h-5 text-secondary" aria-hidden="true" />
+                  <h2 className="font-heading text-lg font-semibold text-white">
+                    <label htmlFor="login-phone">Phone number</label>
+                  </h2>
                 </div>
                 <p className="text-sm text-white/50 mb-5">We'll send an OTP to verify</p>
                 <div className="space-y-3">
                   <div className="flex gap-2">
                     <div className="flex items-center px-3 rounded-xl bg-white/5 border border-white/15 text-white/70 text-sm font-semibold flex-shrink-0 h-12">+91</div>
-                    <input type="tel" inputMode="numeric" placeholder="10-digit number" value={phone}
+                    <input id="login-phone" type="tel" inputMode="numeric" placeholder="10-digit number" value={phone}
                       onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       onKeyDown={e => e.key === "Enter" && handleSendOtp()}
                       className="flex-1 h-12 px-4 rounded-xl bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-base focus:outline-none focus:border-secondary/60 transition-all" />
@@ -107,7 +109,7 @@ const LoginPage = () => {
 
             {step === "otp" && (
               <motion.div key="otp" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                <button id="btn-login-otp-back" onClick={() => { setStep("phone"); setOtp(""); }} className="flex items-center gap-1 text-sm text-white/40 hover:text-white transition-colors mb-4 min-h-[44px]">
+                <button id="btn-login-otp-back" onClick={() => { setStep("phone"); setOtp(""); }} className="flex items-center gap-1 text-sm text-white/50 hover:text-white transition-colors mb-4 min-h-[44px]">
                   <ChevronLeft className="w-4 h-4" /> Change number
                 </button>
                 <div className="flex items-center gap-2 mb-1">
@@ -130,7 +132,7 @@ const LoginPage = () => {
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><ArrowRight className="w-4 h-4" /> Verify</>}
                   </button>
                   <button id="btn-login-resend-otp" onClick={() => handleSendOtp(true)} disabled={loading || resendIn > 0}
-                    className="w-full text-center text-sm text-white/30 hover:text-secondary disabled:hover:text-white/30 disabled:cursor-not-allowed transition-colors min-h-[44px] flex items-center justify-center">
+                    className="w-full text-center text-sm text-white/50 hover:text-secondary disabled:hover:text-white/50 disabled:cursor-not-allowed transition-colors min-h-[44px] flex items-center justify-center">
                     {resendIn > 0 ? `Resend OTP in ${resendIn}s` : "Didn't receive? Resend OTP"}
                   </button>
                 </div>
@@ -141,7 +143,9 @@ const LoginPage = () => {
               <motion.div key="name" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <div className="flex items-center gap-2 mb-3">
                   <User className="w-5 h-5 text-secondary" />
-                  <h2 className="font-heading text-lg font-semibold text-white">Your name</h2>
+                  <h2 className="font-heading text-lg font-semibold text-white">
+                    <label htmlFor="login-name">Your name</label>
+                  </h2>
                 </div>
                 <div className="flex items-center justify-between gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2.5 mb-5">
                   <div className="flex items-center gap-2 min-w-0">
@@ -160,10 +164,10 @@ const LoginPage = () => {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  <input placeholder="e.g. Rahul Sharma" value={name} onChange={e => setName(e.target.value)} autoFocus
+                  <input id="login-name" placeholder="e.g. Rahul Sharma" value={name} onChange={e => setName(e.target.value)} autoFocus
                     onKeyDown={e => e.key === "Enter" && handleComplete()}
                     className="w-full h-12 px-4 rounded-xl bg-white/5 border border-white/15 text-white placeholder:text-white/30 text-base font-medium focus:outline-none focus:border-secondary/60 transition-all" />
-                  <p className="text-xs text-white/30">This will appear on your nomination</p>
+                  <p className="text-xs text-white/50">This will appear on your nomination</p>
                   <button id="btn-login-complete" onClick={handleComplete} disabled={!name.trim()}
                     className="w-full h-12 rounded-xl bg-gradient-to-r from-[#9B2020] to-[#7A1515] text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-50">
                     <ArrowRight className="w-4 h-4" /> Continue
@@ -173,7 +177,7 @@ const LoginPage = () => {
             )}
           </AnimatePresence>
         </div>
-        <p className="text-center text-xs text-white/20 mt-5">Free · No spam · Secure OTP verification</p>
+        <p className="text-center text-xs text-white/50 mt-5">Free · No spam · Secure OTP verification</p>
       </motion.div>
     </div>
   );

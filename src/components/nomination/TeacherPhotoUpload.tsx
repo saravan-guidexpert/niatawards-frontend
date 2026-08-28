@@ -84,13 +84,15 @@ const TeacherPhotoUpload = ({ value, onChange, variant = "dark", onBusyChange }:
   return (
     <div>
       <label
+        htmlFor="nom-teacher-photo"
         className={`block text-[11px] font-semibold mb-1 uppercase tracking-wider ${
           dark ? "text-white/60" : "text-foreground/70"
         }`}
       >
-        Teacher photo <span className={dark ? "text-white/35 font-normal normal-case" : "text-foreground/40 font-normal normal-case"}>(optional, max 3MB)</span>
+        Teacher photo <span className={dark ? "text-white/50 font-normal normal-case" : "text-foreground/40 font-normal normal-case"}>(optional, max 3MB)</span>
       </label>
       <input
+        id="nom-teacher-photo"
         ref={inputRef}
         type="file"
         accept={ACCEPT}

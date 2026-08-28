@@ -57,12 +57,12 @@ const FinalCTASection = () => {
               <div className="niat-cta-shine absolute inset-0 w-24 bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none" />
             </Link>
           </div>
-          <p className="text-white/40 text-sm mt-5">
+          <p className="text-white/50 text-sm mt-5">
             Are you a teacher? <Link to="/nominate-teacher" className="text-secondary hover:text-secondary/80 font-medium">Nominate yourself</Link>
           </p>
 
           <p
-            className={`text-white/30 text-xs mt-6 ${vis}`}
+            className={`text-white/50 text-xs mt-6 ${vis}`}
             style={{ animationDelay: inView ? "0.8s" : undefined }}
           >
             Free · Takes 3 minutes · Open to all Indian students

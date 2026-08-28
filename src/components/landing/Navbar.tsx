@@ -76,11 +76,12 @@ const Navbar = () => {
                 </div>
               </div>
             )}
-            <Link to="/nominate-student">
-              <button id="btn-nav-nominate"
-                className="text-[13px] font-bold px-4 py-2.5 rounded-lg bg-white text-[#6B1212] hover:bg-white/90 transition-all shadow-sm min-h-[44px]">
-                Nominate
-              </button>
+            <Link
+              id="btn-nav-nominate"
+              to="/nominate-student"
+              className="inline-flex items-center justify-center text-[13px] font-bold px-4 py-2.5 rounded-lg bg-white text-[#6B1212] hover:bg-white/90 transition-all shadow-sm min-h-[44px] no-underline"
+            >
+              Nominate
             </Link>
           </div>
 
@@ -94,17 +95,26 @@ const Navbar = () => {
                 <span className="text-[11px] font-semibold text-white max-w-[70px] truncate">{user?.name || "Hi!"}</span>
               </div>
             )}
-            <button id="btn-nav-mobile-menu" className="p-2.5 text-white/80 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center" onClick={() => setOpen(!open)}>
-              {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <button
+              id="btn-nav-mobile-menu"
+              type="button"
+              className="p-2.5 text-white/80 hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+              aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={open}
+              aria-controls="nav-mobile-menu"
+              onClick={() => setOpen(!open)}
+            >
+              {open ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
             </button>
           </div>
         </div>
 
         {/* Mobile menu */}
         <div
+          id="nav-mobile-menu"
           className={`md:hidden niat-nav-menu border-t border-white/10 ${open ? "niat-nav-menu-open" : ""}`}
           style={{ backgroundColor: NAV_BG_MENU }}
-          aria-hidden={!open}
+          inert={!open ? true : undefined}
         >
           <div className="niat-nav-menu-inner">
             <div className="px-4 py-2 flex flex-col">
@@ -115,17 +125,21 @@ const Navbar = () => {
                 </a>
               ))}
               <div className="py-3 flex flex-col gap-2.5">
-                <Link to="/nominate-student" onClick={() => setOpen(false)}>
-                  <button id="btn-nav-mobile-nominate"
-                    className="w-full text-[15px] font-bold py-3.5 rounded-xl bg-white text-[#6B1212] min-h-[52px]">
-                    Nominate a Teacher
-                  </button>
+                <Link
+                  id="btn-nav-mobile-nominate"
+                  to="/nominate-student"
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center justify-center text-[15px] font-bold py-3.5 rounded-xl bg-white text-[#6B1212] min-h-[52px] no-underline"
+                >
+                  Nominate a Teacher
                 </Link>
-                <Link to="/nominate-teacher" onClick={() => setOpen(false)}>
-                  <button id="btn-nav-mobile-nominate-teacher"
-                    className="w-full text-[15px] font-medium py-3.5 rounded-xl border border-white/20 text-white/80 min-h-[52px]">
-                    Teacher Self-Nomination
-                  </button>
+                <Link
+                  id="btn-nav-mobile-nominate-teacher"
+                  to="/nominate-teacher"
+                  onClick={() => setOpen(false)}
+                  className="flex w-full items-center justify-center text-[15px] font-medium py-3.5 rounded-xl border border-white/20 text-white/80 min-h-[52px] no-underline"
+                >
+                  Teacher Self-Nomination
                 </Link>
               </div>
             </div>

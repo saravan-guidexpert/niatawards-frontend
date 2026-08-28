@@ -1,8 +1,8 @@
 /**
- * Third-party tags (GA4, Google Ads, Meta Pixel, Clarity).
+ * Third-party tags (GA4, Google Ads, Meta Pixel, Snap Pixel, Clarity).
  *
- * Stubs queue events immediately so React/gtag calls are not lost.
- * Network scripts load after first paint (GA/Ads/Pixel) or on idle (Clarity).
+ * Stubs queue events immediately so React/gtag/snaptr calls are not lost.
+ * Network scripts load after first paint (GA/Ads/Pixel/Snap) or on idle (Clarity).
  * Each provider is injected at most once.
  */
 
@@ -10,15 +10,18 @@ const GA4_ID = "G-9BZPGSKKYE";
 const ADS_ID = "AW-16608374468";
 const ADS_CONVERSION = "AW-16608374468/EtKvCIHcoegcEMTdvu89";
 const PIXEL_ID = "618460890635684";
+const SNAP_ID = "eaf0e62f-1796-47bd-8c5e-863aa746a9e3";
 const CLARITY_ID = "y8xb26d5ve";
 
 const SCRIPT_GTAG = "niat-gtag";
 const SCRIPT_PIXEL = "niat-pixel";
+const SCRIPT_SNAP = "niat-snap";
 const SCRIPT_CLARITY = "niat-clarity";
 
 let scheduled = false;
 let gtagQueued = false;
 let pixelQueued = false;
+let snapQueued = false;
 
 type PixelFn = {
   (...args: unknown[]): void;
@@ -31,10 +34,17 @@ type PixelFn = {
 
 type ClarityFn = ((...args: unknown[]) => void) & { q?: unknown[] };
 
+type SnaptrFn = {
+  (...args: unknown[]): void;
+  handleRequest?: (...args: unknown[]) => void;
+  queue: unknown[];
+};
+
 declare global {
   interface Window {
     fbq?: PixelFn;
     _fbq?: PixelFn;
+    snaptr?: SnaptrFn;
     clarity?: ClarityFn;
   }
 }
@@ -120,6 +130,30 @@ function loadPixel() {
   injectScript(SCRIPT_PIXEL, "https://connect.facebook.net/en_US/fbevents.js");
 }
 
+function installSnapStub() {
+  if (typeof window.snaptr === "function") return;
+  const snaptr = function () {
+    if (snaptr.handleRequest) {
+      snaptr.handleRequest.apply(snaptr, arguments as unknown as []);
+    } else {
+      snaptr.queue.push(arguments);
+    }
+  } as SnaptrFn;
+  snaptr.queue = [];
+  window.snaptr = snaptr;
+}
+
+function queueSnapBootstrap() {
+  if (snapQueued) return;
+  snapQueued = true;
+  window.snaptr!("init", SNAP_ID);
+  window.snaptr!("track", "PAGE_VIEW");
+}
+
+function loadSnap() {
+  injectScript(SCRIPT_SNAP, "https://sc-static.net/scevent.min.js");
+}
+
 function loadClarity() {
   if (document.getElementById(SCRIPT_CLARITY)) return;
   window.clarity =
@@ -141,10 +175,13 @@ export function scheduleThirdPartyTracking() {
   queueGtagBootstrap();
   installPixelStub();
   queuePixelBootstrap();
+  installSnapStub();
+  queueSnapBootstrap();
 
   afterFirstPaint(() => {
     loadGtag();
     loadPixel();
+    loadSnap();
   });
   whenIdle(() => {
     loadClarity();

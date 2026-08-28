@@ -18,7 +18,7 @@ const Footer = () => (
               decoding="async"
             />
           </Link>
-          <p className="text-[13px] text-white/35 leading-relaxed">
+          <p className="text-[13px] text-white/50 leading-relaxed">
             Celebrating India's most impactful teachers. Nominating the educators who build futures, not just scores.
           </p>
         </div>
@@ -26,18 +26,18 @@ const Footer = () => (
         {/* Links */}
         <div className="flex gap-10 sm:gap-14 flex-wrap">
           <div>
-            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-widest mb-3">Navigate</p>
+            <p className="text-[11px] font-semibold text-white/50 uppercase tracking-widest mb-3">Navigate</p>
             <div className="flex flex-col gap-3">
               {[{ label: "Home", to: "/" }, { label: "Student nomination", to: "/nominate-student" }, { label: "Teacher nomination", to: "/nominate-teacher" }].map(l => (
-                <Link key={l.to} to={l.to} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="text-[14px] text-white/45 hover:text-white/80 transition-colors min-h-[44px] flex items-center">{l.label}</Link>
+                <Link key={l.to} to={l.to} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="text-[14px] text-white/60 hover:text-white/80 transition-colors min-h-[44px] flex items-center">{l.label}</Link>
               ))}
             </div>
           </div>
           <div>
-            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-widest mb-3">Awards</p>
+            <p className="text-[11px] font-semibold text-white/50 uppercase tracking-widest mb-3">Awards</p>
             <div className="flex flex-col gap-2">
               {["Student Transformation", "Teaching Innovation", "Beyond Classroom", "Future Readiness"].map(l => (
-                <span key={l} className="text-[13px] text-white/35 leading-relaxed">{l}</span>
+                <span key={l} className="text-[13px] text-white/50 leading-relaxed">{l}</span>
               ))}
             </div>
           </div>
@@ -47,20 +47,20 @@ const Footer = () => (
 
     <div className="border-t border-white/[0.04]">
       <div className="px-4 sm:px-6 py-4 max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-        <p className="text-[11px] text-white/20 text-center sm:text-left">
+        <p className="text-[11px] text-white/50 text-center sm:text-left">
           © 2026 Nxtwave of Innovation in Advanced Technologies. All rights reserved.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
           <a href="https://www.ccbp.in/privacy-policy" target="_blank" rel="noopener noreferrer"
-            className="text-[11px] text-white/30 hover:text-white/60 transition-colors min-h-[44px] inline-flex items-center px-1">
+            className="text-[11px] text-white/50 hover:text-white/80 transition-colors min-h-[44px] inline-flex items-center px-1">
             Privacy Policy
           </a>
           <a href="https://www.ccbp.in/terms-and-conditions" target="_blank" rel="noopener noreferrer"
-            className="text-[11px] text-white/30 hover:text-white/60 transition-colors min-h-[44px] inline-flex items-center px-1">
+            className="text-[11px] text-white/50 hover:text-white/80 transition-colors min-h-[44px] inline-flex items-center px-1">
             Terms of Use
           </a>
           <a href="https://www.ccbp.in/grievance-redressal" target="_blank" rel="noopener noreferrer"
-            className="text-[11px] text-white/30 hover:text-white/60 transition-colors min-h-[44px] inline-flex items-center px-1">
+            className="text-[11px] text-white/50 hover:text-white/80 transition-colors min-h-[44px] inline-flex items-center px-1">
             Grievance
           </a>
         </div>
