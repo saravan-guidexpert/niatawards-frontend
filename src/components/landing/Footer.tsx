@@ -14,6 +14,8 @@ const Footer = () => (
               height={56}
               className="h-8 w-auto sm:h-10"
               style={{ display: "block", flexShrink: 0, objectFit: "contain" }}
+              loading="lazy"
+              decoding="async"
             />
           </Link>
           <p className="text-[13px] text-white/35 leading-relaxed">

@@ -2,7 +2,35 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  // Scan live app code only. Unused shadcn files (sidebar, chart, accordion, …)
+  // still live on disk but must not generate homepage CSS.
+  // Positive globs only — a `!ui/**` exclude was wiping the files listed below.
+  content: [
+    "./index.html",
+    "./src/App.tsx",
+    "./src/main.tsx",
+    "./src/pages/**/*.{ts,tsx}",
+    "./src/components/landing/**/*.{ts,tsx}",
+    "./src/components/nomination/**/*.{ts,tsx}",
+    "./src/components/admin/**/*.{ts,tsx}",
+    "./src/hooks/**/*.{ts,tsx}",
+    "./src/contexts/**/*.{ts,tsx}",
+    "./src/lib/**/*.{ts,tsx}",
+    "./src/components/ui/badge.tsx",
+    "./src/components/ui/button.tsx",
+    "./src/components/ui/calendar.tsx",
+    "./src/components/ui/command.tsx",
+    "./src/components/ui/dialog.tsx",
+    "./src/components/ui/input-otp.tsx",
+    "./src/components/ui/input.tsx",
+    "./src/components/ui/label.tsx",
+    "./src/components/ui/popover.tsx",
+    "./src/components/ui/select.tsx",
+    "./src/components/ui/switch.tsx",
+    "./src/components/ui/textarea.tsx",
+    "./src/components/ui/toast.tsx",
+    "./src/components/ui/toaster.tsx",
+  ],
   prefix: "",
   theme: {
     container: {
@@ -66,30 +94,6 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-      },
-      keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
-        "float": {
-          "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-10px)" },
-        },
-        "pulse-glow": {
-          "0%, 100%": { boxShadow: "0 0 20px hsl(0 68% 30% / 0.3)" },
-          "50%": { boxShadow: "0 0 40px hsl(0 68% 30% / 0.5)" },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "float": "float 3s ease-in-out infinite",
-        "pulse-glow": "pulse-glow 2s ease-in-out infinite",
       },
     },
   },

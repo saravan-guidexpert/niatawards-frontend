@@ -24,11 +24,20 @@ export default defineConfig(({ mode }) => ({
     // Manual chunk splitting for better caching
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react":    ["react", "react-dom", "react-router-dom"],
-          "vendor-motion":   ["framer-motion"],
-          "vendor-query":    ["@tanstack/react-query"],
-          "vendor-ui":       ["lucide-react"],
+        // Function form so shared deps (react/jsx-runtime) stay with React,
+        // not inside vendor-motion. Array-form was causing the homepage to
+        // statically import vendor-motion just for jsx().
+        manualChunks(id) {
+          if (id.includes("node_modules/framer-motion")) return "vendor-motion";
+          if (id.includes("node_modules/lucide-react")) return "vendor-ui";
+          if (
+            id.includes("node_modules/react-dom") ||
+            id.includes("node_modules/react-router") ||
+            id.includes("node_modules/scheduler") ||
+            id.includes("/node_modules/react/")
+          ) {
+            return "vendor-react";
+          }
         },
       },
     },

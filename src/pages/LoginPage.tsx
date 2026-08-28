@@ -67,7 +67,7 @@ const LoginPage = () => {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#8B1A1A] to-[#6B1212] flex items-center justify-center mx-auto mb-4 ring-1 ring-white/10">
-            <img src="/niat-logo-tight.webp" alt="NIAT" className="w-9 h-9 object-contain" />
+            <img src="/niat-logo-tight.webp" alt="NIAT" width={36} height={36} className="w-9 h-9 object-contain" />
           </div>
           <h1 className="font-heading text-2xl font-bold text-white">Welcome</h1>
           <p className="text-sm text-white/50 mt-1">NIAT Future-Ready Educator Awards 2026</p>

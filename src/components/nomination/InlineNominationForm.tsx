@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, CheckCircle2, Loader2, ArrowRight, User } from "lucide-react";
@@ -8,7 +8,10 @@ import { createNominationDraft, getNominationDraft, updateNominationDraft, type 
 import { clearDraftSession, getDraftSession, saveDraftSession } from "@/lib/nominationDraft";
 import { TEACHER_PHONE_SAME_AS_STUDENT_MSG, teacherPhoneMatchesStudent } from "@/lib/utils";
 import { trackFunnel } from "@/lib/funnel";
-import TeacherPhotoUpload from "@/components/nomination/TeacherPhotoUpload";
+
+const TeacherPhotoUpload = lazy(() => import("@/components/nomination/TeacherPhotoUpload"));
+
+const PhotoUploadFallback = () => <div className="h-[88px]" aria-hidden="true" />;
 
 declare function gtag(...args: any[]): void;
 const track = (event: string, params?: Record<string, any>) => { try { gtag("event", event, params); } catch {} };
@@ -529,14 +532,18 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
                 <FormTextarea label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." optional rows={3} />
                 <input style={iStyle} className={iCls} placeholder="Awards / Recognition (Optional)" value={sf.awardsRecognition} onChange={e => setSF("awardsRecognition", e.target.value)} />
                 <input style={iStyle} className={iCls} placeholder="Teacher's LinkedIn / Social Media (Optional)" value={sf.teacherSocial} onChange={e => setSF("teacherSocial", e.target.value)} />
-                <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
+                <Suspense fallback={<PhotoUploadFallback />}>
+                  <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
+                </Suspense>
               </div>
             )}
 
             {role === "teacher" && (
               <div className="space-y-2">
                 <FormTextarea label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
-                <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
+                <Suspense fallback={<PhotoUploadFallback />}>
+                  <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
+                </Suspense>
               </div>
             )}
 

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { ImagePlus, Loader2, X } from "lucide-react";
 import { uploadNominationPhoto } from "@/lib/api";
+import { cloudinaryDisplayUrl } from "@/lib/cloudinaryUrl";
 
 const MAX_BYTES = 3 * 1024 * 1024;
 const ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif";
@@ -103,8 +104,10 @@ const TeacherPhotoUpload = ({ value, onChange, variant = "dark", onBusyChange }:
           }`}
         >
           <img
-            src={preview}
+            src={cloudinaryDisplayUrl(preview, { width: 560 })}
             alt="Teacher photo preview"
+            width={560}
+            height={112}
             className="h-28 w-full object-cover"
             onError={() => setPreviewBroken(true)}
           />

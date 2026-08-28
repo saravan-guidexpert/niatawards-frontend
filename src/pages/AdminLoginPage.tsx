@@ -57,7 +57,7 @@ const AdminLoginPage = () => {
       >
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#8B1A1A] to-[#6B1212] shadow-xl shadow-[#8B1A1A]/30 ring-1 ring-white/10 flex items-center justify-center mx-auto mb-4">
-            <img src="/niat-logo.webp" alt="NIAT" className="w-11 h-11 object-contain" />
+            <img src="/niat-logo.webp" alt="NIAT" width={44} height={44} className="w-11 h-11 object-contain" />
           </div>
           <h1 className="font-heading text-2xl font-bold text-primary-foreground">Admin Portal</h1>
           <p className="text-primary-foreground/50 text-sm mt-1">NIAT Future-Ready Educator Awards 2026</p>

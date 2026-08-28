@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { cloudinaryDisplayUrl } from "@/lib/cloudinaryUrl";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
@@ -296,7 +297,15 @@ const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: 
     <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
       {n.photo_url ? (
         <button type="button" onClick={() => onPhotoClick?.(n)} className="flex-shrink-0 w-full sm:w-auto">
-          <img src={n.photo_url} alt={displayName(n)} className="w-full h-44 sm:w-28 sm:h-28 rounded-xl object-cover border border-white/10" />
+          <img
+            src={cloudinaryDisplayUrl(n.photo_url, { width: 560 })}
+            alt={displayName(n)}
+            width={224}
+            height={176}
+            className="w-full h-44 sm:w-28 sm:h-28 rounded-xl object-cover border border-white/10"
+            loading="lazy"
+            decoding="async"
+          />
         </button>
       ) : (
         <div className="w-full h-32 sm:w-28 sm:h-28 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/25">
@@ -412,7 +421,11 @@ const PhotoLightbox = ({ photo, onClose }: { photo: { url: string; name: string 
         <button onClick={onClose} className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-black/60 text-white/80 hover:text-white flex items-center justify-center">
           <X className="w-5 h-5" />
         </button>
-        <img src={photo.url} alt={photo.name} className="w-full max-h-[80dvh] object-contain rounded-xl" />
+        <img
+          src={cloudinaryDisplayUrl(photo.url, { width: 1400, crop: "limit" })}
+          alt={photo.name}
+          className="w-full max-h-[80dvh] object-contain rounded-xl"
+        />
         <p className="text-center text-white/80 text-sm mt-3 px-2">{photo.name}</p>
       </motion.div>
     </div>
@@ -516,8 +529,10 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
             <div>
               <Label className="text-white/60 text-xs mb-1.5 block">Teacher photo</Label>
               <img
-                src={form.photo_url}
+                src={cloudinaryDisplayUrl(form.photo_url, { width: 224 })}
                 alt={form.teacher_name || form.full_name || "Teacher"}
+                width={112}
+                height={112}
                 className="h-28 w-28 rounded-xl object-cover border border-white/10"
               />
             </div>
@@ -841,7 +856,7 @@ const AdminPage = () => {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#8B1A1A] to-[#6B1212] ring-1 ring-white/10 flex items-center justify-center flex-shrink-0">
-              <img src="/niat-logo-tight.webp" alt="NIAT" className="w-5 h-5 object-contain" />
+              <img src="/niat-logo-tight.webp" alt="NIAT" width={20} height={20} className="w-5 h-5 object-contain" />
             </div>
             <div className="min-w-0">
               <h1 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">Admin Dashboard</h1>
@@ -1030,7 +1045,13 @@ const AdminPage = () => {
                     </div>
                     <p className="text-sm text-primary-foreground/60 flex items-center gap-2">
                       {submitted[0].photo_url ? (
-                        <img src={submitted[0].photo_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
+                        <img
+                          src={cloudinaryDisplayUrl(submitted[0].photo_url, { width: 64 })}
+                          alt=""
+                          width={32}
+                          height={32}
+                          className="w-8 h-8 rounded-lg object-cover border border-white/10"
+                        />
                       ) : null}
                       {submitted[0].teacher_name || submitted[0].full_name || "—"}
                     </p>
@@ -1144,7 +1165,15 @@ const AdminPage = () => {
                         onClick={() => setLightbox({ url: n.photo_url, name: displayName(n) })}
                         className="block w-full"
                       >
-                        <img src={n.photo_url} alt={displayName(n)} className="w-full h-48 rounded-xl object-cover border border-white/10" />
+                        <img
+                          src={cloudinaryDisplayUrl(n.photo_url, { width: 800 })}
+                          alt={displayName(n)}
+                          width={800}
+                          height={384}
+                          className="w-full h-48 rounded-xl object-cover border border-white/10"
+                          loading="lazy"
+                          decoding="async"
+                        />
                       </button>
                     ) : (
                       <div className="w-full h-36 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/20">
@@ -1223,7 +1252,15 @@ const AdminPage = () => {
                               className="block"
                               title="View photo"
                             >
-                              <img src={n.photo_url} alt={displayName(n)} className="w-11 h-11 rounded-lg object-cover border border-white/10 hover:ring-2 hover:ring-white/30" />
+                              <img
+                                src={cloudinaryDisplayUrl(n.photo_url, { width: 88 })}
+                                alt={displayName(n)}
+                                width={44}
+                                height={44}
+                                className="w-11 h-11 rounded-lg object-cover border border-white/10 hover:ring-2 hover:ring-white/30"
+                                loading="lazy"
+                                decoding="async"
+                              />
                             </button>
                           ) : (
                             <div className="w-11 h-11 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/20">

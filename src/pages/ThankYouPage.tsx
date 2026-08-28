@@ -5,7 +5,6 @@ import Navbar from "@/components/landing/Navbar";
 import Footer from "@/components/landing/Footer";
 
 const SITE_URL = "https://www.niatawards.in";
-const POSTER_PATH = "/share-poster.jpg";
 
 const ThankYouPage = () => {
   const navigate = useNavigate();
@@ -48,9 +47,12 @@ const ThankYouPage = () => {
               <p className="text-foreground/55 text-sm mb-4">Share with your friends and spread the word.</p>
               {!isTeacher && (
                 <img
-                  src={POSTER_PATH}
+                  src="/share-poster-480.jpg"
+                  width={480}
+                  height={600}
                   alt="NIAT Guru Ratna Awards poster"
                   className="w-full max-w-[240px] mx-auto mb-4 rounded-xl border border-border/50"
+                  decoding="async"
                 />
               )}
               <a

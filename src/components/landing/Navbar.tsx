@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 
 const NAV_BG = "#000000";
@@ -51,7 +50,6 @@ const Navbar = () => {
               height={56}
               className="h-8 w-auto sm:h-10 max-w-full"
               style={{ display: "block", objectFit: "contain" }}
-              fetchPriority="high"
             />
           </Link>
 
@@ -103,35 +101,36 @@ const Navbar = () => {
         </div>
 
         {/* Mobile menu */}
-        <AnimatePresence>
-          {open && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
-              className="md:hidden overflow-hidden border-t border-white/10" style={{ backgroundColor: NAV_BG_MENU }}>
-              <div className="px-4 py-2 flex flex-col">
-                {links.map((l) => (
-                  <a key={l.hash} href={l.hash} onClick={(e) => handleNavClick(e, l.hash)}
-                    className="text-[15px] font-medium text-white/80 hover:text-white py-3.5 border-b border-white/[0.08] last:border-0 transition-colors cursor-pointer min-h-[52px] flex items-center">
-                    {l.label}
-                  </a>
-                ))}
-                <div className="py-3 flex flex-col gap-2.5">
-                  <Link to="/nominate-student" onClick={() => setOpen(false)}>
-                    <button id="btn-nav-mobile-nominate"
-                      className="w-full text-[15px] font-bold py-3.5 rounded-xl bg-white text-[#6B1212] min-h-[52px]">
-                      Nominate a Teacher
-                    </button>
-                  </Link>
-                  <Link to="/nominate-teacher" onClick={() => setOpen(false)}>
-                    <button id="btn-nav-mobile-nominate-teacher"
-                      className="w-full text-[15px] font-medium py-3.5 rounded-xl border border-white/20 text-white/80 min-h-[52px]">
-                      Teacher Self-Nomination
-                    </button>
-                  </Link>
-                </div>
+        <div
+          className={`md:hidden niat-nav-menu border-t border-white/10 ${open ? "niat-nav-menu-open" : ""}`}
+          style={{ backgroundColor: NAV_BG_MENU }}
+          aria-hidden={!open}
+        >
+          <div className="niat-nav-menu-inner">
+            <div className="px-4 py-2 flex flex-col">
+              {links.map((l) => (
+                <a key={l.hash} href={l.hash} onClick={(e) => handleNavClick(e, l.hash)}
+                  className="text-[15px] font-medium text-white/80 hover:text-white py-3.5 border-b border-white/[0.08] last:border-0 transition-colors cursor-pointer min-h-[52px] flex items-center">
+                  {l.label}
+                </a>
+              ))}
+              <div className="py-3 flex flex-col gap-2.5">
+                <Link to="/nominate-student" onClick={() => setOpen(false)}>
+                  <button id="btn-nav-mobile-nominate"
+                    className="w-full text-[15px] font-bold py-3.5 rounded-xl bg-white text-[#6B1212] min-h-[52px]">
+                    Nominate a Teacher
+                  </button>
+                </Link>
+                <Link to="/nominate-teacher" onClick={() => setOpen(false)}>
+                  <button id="btn-nav-mobile-nominate-teacher"
+                    className="w-full text-[15px] font-medium py-3.5 rounded-xl border border-white/20 text-white/80 min-h-[52px]">
+                    Teacher Self-Nomination
+                  </button>
+                </Link>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </div>
+        </div>
       </nav>
     </header>
   );

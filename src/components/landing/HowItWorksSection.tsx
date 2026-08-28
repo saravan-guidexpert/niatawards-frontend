@@ -1,6 +1,6 @@
-import { motion, useInView } from "framer-motion";
 import { FileText, Search, Trophy } from "lucide-react";
 import { useRef } from "react";
+import { useInViewOnce } from "@/hooks/use-in-view";
 
 const steps = [
   {
@@ -24,18 +24,15 @@ const steps = [
 ];
 
 const HowItWorksSection = () => {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: "-80px" });
+  const ref = useRef<HTMLElement>(null);
+  const inView = useInViewOnce(ref, "-80px");
+  const vis = inView ? "niat-reveal-on" : "niat-reveal";
+  const visLeft = inView ? "niat-reveal-left-on" : "niat-reveal-left";
 
   return (
     <section className="py-16 sm:py-24 bg-[#0a0a0a]" id="how-it-works" ref={ref}>
       <div className="container">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={inView ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="text-center mb-12 sm:mb-16"
-        >
+        <div className={`text-center mb-12 sm:mb-16 ${vis}`}>
           <span className="inline-block text-[11px] font-semibold text-secondary uppercase tracking-[0.22em] bg-secondary/10 border border-secondary/20 px-4 py-1.5 rounded-full mb-5">
             Selection Process
           </span>
@@ -45,17 +42,14 @@ const HowItWorksSection = () => {
           <p className="text-white/55 max-w-xl mx-auto text-base sm:text-lg leading-relaxed">
             A measured, transparent process — so recognition reaches teachers whose impact is genuine and lasting.
           </p>
-        </motion.div>
+        </div>
 
-        {/* Desktop */}
         <div className="hidden md:grid grid-cols-3 gap-6">
           {steps.map((s, i) => (
-            <motion.article
+            <article
               key={s.title}
-              initial={{ opacity: 0, y: 28 }}
-              animate={inView ? { opacity: 1, y: 0 } : {}}
-              transition={{ delay: 0.15 + i * 0.12, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-              className="group relative rounded-2xl border border-white/[0.08] bg-white/[0.025] p-8 overflow-hidden hover:border-secondary/25 hover:bg-white/[0.04] transition-colors duration-300"
+              className={`group relative rounded-2xl border border-white/[0.08] bg-white/[0.025] p-8 overflow-hidden hover:border-secondary/25 hover:bg-white/[0.04] transition-colors duration-300 ${vis}`}
+              style={{ animationDelay: inView ? `${0.15 + i * 0.12}s` : undefined }}
             >
               <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-secondary/50 to-transparent opacity-70" />
               <span
@@ -75,21 +69,18 @@ const HowItWorksSection = () => {
                 <h3 className="font-heading text-xl font-semibold text-white mb-3">{s.title}</h3>
                 <p className="text-white/55 text-sm leading-relaxed">{s.desc}</p>
               </div>
-            </motion.article>
+            </article>
           ))}
         </div>
 
-        {/* Mobile timeline */}
         <div className="md:hidden relative pl-8">
           <div className="absolute left-[11px] top-2 bottom-2 w-px bg-gradient-to-b from-secondary/50 via-white/10 to-secondary/40" />
           <div className="space-y-4">
             {steps.map((s, i) => (
-              <motion.article
+              <article
                 key={s.title}
-                initial={{ opacity: 0, x: -16 }}
-                animate={inView ? { opacity: 1, x: 0 } : {}}
-                transition={{ delay: 0.12 + i * 0.1, duration: 0.45 }}
-                className="relative rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5"
+                className={`relative rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 ${visLeft}`}
+                style={{ animationDelay: inView ? `${0.12 + i * 0.1}s` : undefined }}
               >
                 <div className="absolute -left-8 top-6 w-[23px] h-[23px] rounded-full bg-[#0a0a0a] border border-secondary/40 flex items-center justify-center">
                   <span className="w-2 h-2 rounded-full bg-secondary" />
@@ -99,7 +90,7 @@ const HowItWorksSection = () => {
                 </p>
                 <h3 className="font-heading text-base font-semibold text-white mb-1.5">{s.title}</h3>
                 <p className="text-white/55 text-sm leading-relaxed">{s.desc}</p>
-              </motion.article>
+              </article>
             ))}
           </div>
         </div>
