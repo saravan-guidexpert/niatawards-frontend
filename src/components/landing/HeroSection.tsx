@@ -346,7 +346,7 @@ const HeroSection = ({ lockedRole = "student" }: { lockedRole?: "student" | "tea
             <span className="text-xs font-bold text-secondary tracking-widest uppercase">NIAT Presents · 2026</span>
           </div>
 
-          <div className="overflow-hidden mb-5">
+          <div className="mb-5">
             <h1 className="niat-hero-title font-heading text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-[1.05]">
               NIAT{" "}
               <span className="relative inline-block">
