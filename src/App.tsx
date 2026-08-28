@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, type ComponentType } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { captureUtmParams } from "./lib/utm";
-import { Toaster } from "@/components/ui/toaster";
+import { ToastHost } from "@/components/ui/ToastHost";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 
@@ -73,7 +73,7 @@ const App = () => (
       v7_relativeSplatPath: true,
     }}
   >
-    <Toaster />
+    <ToastHost />
     <AuthProvider>
       <UtmCapture />
       {/* Skip to content — accessibility */}

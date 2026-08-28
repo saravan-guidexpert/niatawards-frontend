@@ -30,7 +30,7 @@ const HowItWorksSection = () => {
   const visLeft = inView ? "niat-reveal-left-on" : "niat-reveal-left";
 
   return (
-    <section className="py-16 sm:py-24 bg-[#0a0a0a]" id="how-it-works" ref={ref}>
+    <section className="py-16 sm:py-24 bg-[#0a0a0a]" ref={ref}>
       <div className="container">
         <div className={`text-center mb-12 sm:mb-16 ${vis}`}>
           <span className="inline-block text-[11px] font-semibold text-secondary uppercase tracking-[0.22em] bg-secondary/10 border border-secondary/20 px-4 py-1.5 rounded-full mb-5">

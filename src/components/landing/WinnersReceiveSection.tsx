@@ -14,7 +14,7 @@ const WinnersReceiveSection = () => {
   const vis = inView ? "niat-reveal-on" : "niat-reveal";
 
   return (
-    <section className="py-12 sm:py-16 bg-[#060606]" id="prizes" ref={ref}>
+    <section className="py-12 sm:py-16 bg-[#060606]" ref={ref}>
       <div className="container">
         <div className={`text-center mb-10 ${vis}`}>
           <span

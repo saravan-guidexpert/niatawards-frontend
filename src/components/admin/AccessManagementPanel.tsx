@@ -14,7 +14,7 @@ import {
   adminGetUsers,
   adminUpdateUser,
   type AdminAccount,
-} from "@/lib/api";
+} from "@/lib/apiAdmin";
 import {
   PANEL_LABELS,
   PANEL_PERMISSIONS,

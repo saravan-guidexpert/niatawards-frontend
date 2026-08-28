@@ -4,7 +4,7 @@ import {
   BarChart3, CheckCircle2, ClipboardList, Filter, Image as ImageIcon, Loader2,
   Phone, ShieldCheck, Trophy, Users,
 } from "lucide-react";
-import { adminGetFunnel, type FunnelStage, type FunnelStats } from "@/lib/api";
+import { adminGetFunnel, type FunnelStage, type FunnelStats } from "@/lib/apiAdmin";
 
 const STAGE_ICONS = {
   otp_requested: Phone,

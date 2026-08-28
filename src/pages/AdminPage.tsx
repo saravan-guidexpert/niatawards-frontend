@@ -20,7 +20,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { adminLogout, isAdminLoggedIn } from "./AdminLoginPage";
-import { adminDeleteNomination, adminGetMe, adminGetNominations, adminLogoutApi, adminUpdateNomination } from "@/lib/api";
+import { adminDeleteNomination, adminGetMe, adminGetNominations, adminLogoutApi, adminUpdateNomination } from "@/lib/apiAdmin";
 import CampaignsPanel from "@/components/admin/CampaignsPanel";
 import DigitalMarketingPanel from "@/components/admin/DigitalMarketingPanel";
 import AccessManagementPanel from "@/components/admin/AccessManagementPanel";

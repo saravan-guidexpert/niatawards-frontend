@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
-import { adminCreatePromoLink, adminGetPromoLinks, type PromoLink } from "@/lib/api";
+import { adminCreatePromoLink, adminGetPromoLinks, type PromoLink } from "@/lib/apiAdmin";
 import type { DateRange as DayRange } from "react-day-picker";
 
 const PLATFORMS = [

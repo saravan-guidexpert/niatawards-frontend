@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { adminLogin } from "@/lib/api";
+import { adminLogin } from "@/lib/apiAdmin";
 import { setAdminSession } from "@/lib/adminSession";
 
 export { isAdminLoggedIn, clearAdminSession as adminLogout } from "@/lib/adminSession";

@@ -29,7 +29,7 @@ import {
   type WhatsAppOpsOverview,
   type WhatsAppRetryGroupRow,
   type WhatsAppWebhookRow,
-} from "@/lib/api";
+} from "@/lib/apiAdmin";
 
 type OpsTab = "overview" | "messages" | "retries" | "webhooks" | "failures" | "logs" | "settings";
 

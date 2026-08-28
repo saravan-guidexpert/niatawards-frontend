@@ -29,7 +29,8 @@ export default defineConfig(({ mode }) => ({
         // statically import vendor-motion just for jsx().
         manualChunks(id) {
           if (id.includes("node_modules/framer-motion")) return "vendor-motion";
-          if (id.includes("node_modules/lucide-react")) return "vendor-ui";
+          // Do not force all lucide-react into one chunk: that made `/` download
+          // every icon used by admin, OTP, and below-fold sections.
           if (
             id.includes("node_modules/react-dom") ||
             id.includes("node_modules/react-router") ||

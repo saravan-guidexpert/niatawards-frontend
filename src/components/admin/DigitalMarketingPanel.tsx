@@ -14,7 +14,7 @@ import {
   adminCreateDigitalCampaignLink,
   adminGetDigitalCampaignLinks,
   type DigitalCampaignLink,
-} from "@/lib/api";
+} from "@/lib/apiAdmin";
 import {
   DIGITAL_CHANNELS,
   DIGITAL_CREATIVE_TYPES,
