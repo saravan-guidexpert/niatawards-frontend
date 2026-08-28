@@ -68,6 +68,7 @@ const STAGE_LABELS: Record<string, string> = {
 const FUNNEL_FILTERS = [
   { value: "All", label: "All funnel" },
   { value: "otp_requested", label: "OTP requested" },
+  { value: "otp_not_verified", label: "OTP requested but not verified" },
   { value: "otp_verified", label: "OTP verified" },
   { value: "form_step1", label: "Details filled" },
   { value: "submitted", label: "Submitted" },
@@ -79,6 +80,14 @@ const nominationFunnelStage = (n: any) => {
   if (n.form_step === "details") return "form_step1";
   if (n.form_step === "otp_verified" || n.phone_verified) return "otp_verified";
   return "otp_requested";
+};
+
+const matchesFunnelFilter = (n: any, filter: string) => {
+  if (filter === "All") return true;
+  if (filter === "otp_not_verified") {
+    return isIncomplete(n) && n.form_step === "otp_sent" && !n.phone_verified;
+  }
+  return nominationFunnelStage(n) === filter;
 };
 
 const stageLabel = (n: any) => {
@@ -684,7 +693,7 @@ const AdminPage = () => {
     const matchSearch = haystack.some(v => String(v || "").toLowerCase().includes(q));
     const matchCategory = categoryFilter === "All" || n.award_category === categoryFilter;
     const matchStatus = statusFilter === "All" || n.status === statusFilter;
-    const matchFunnel = funnelFilter === "All" || nominationFunnelStage(n) === funnelFilter;
+    const matchFunnel = matchesFunnelFilter(n, funnelFilter);
     const matchType = typeFilter === "All" || n.type === typeFilter;
     const matchSource = sourceFilter === "All" || utmSourceKey(n) === sourceFilter;
     const matchDate = !dateFilter || istDayKey(n.created_at) === istDayKey(dateFilter);
@@ -1038,7 +1047,7 @@ const AdminPage = () => {
                         </SelectContent>
                       </Select>
                       <Select value={funnelFilter} onValueChange={setFunnelFilter}>
-                        <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[130px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[220px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {FUNNEL_FILTERS.map((s) => (
                             <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
