@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { createNominationDraft, getNominationDraft, updateNominationDraft, type NominationDraft } from "@/lib/api";
 import { clearDraftSession, getDraftSession, saveDraftSession } from "@/lib/nominationDraft";
+import { TEACHER_PHONE_SAME_AS_STUDENT_MSG, teacherPhoneMatchesStudent } from "@/lib/utils";
 import { trackFunnel } from "@/lib/funnel";
 import TeacherPhotoUpload from "@/components/nomination/TeacherPhotoUpload";
 
@@ -285,8 +286,12 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     if (role === "student") {
       if (!sf.currentEducation) { toast({ title: "Please select your current education", variant: "destructive" }); return; }
       if (!sf.schoolName.trim()) { toast({ title: "Please enter school / college name", variant: "destructive" }); return; }
-      if (!sf.teacherName.trim()) { toast({ title: "Please enter the teacher's name", variant: "destructive" }); return; }
+      if (!sf.teacherName.trim()) { toast({ title: "Please enter the teacher's full name", variant: "destructive" }); return; }
       if (sf.teacherPhone.replace(/\D/g, "").length < 10) { toast({ title: "Please enter a valid teacher phone number", variant: "destructive" }); return; }
+      if (teacherPhoneMatchesStudent(sf.teacherPhone, phone)) {
+        toast({ title: TEACHER_PHONE_SAME_AS_STUDENT_MSG, variant: "destructive" });
+        return;
+      }
       if (!sf.teachingSubject.trim()) { toast({ title: "Please enter the teaching subject", variant: "destructive" }); return; }
     } else {
       if (!tf.school.trim()) { toast({ title: "Please enter school / college name", variant: "destructive" }); return; }
@@ -462,9 +467,26 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
                 <CustomSelect value={sf.currentEducation} onChange={v => setSF("currentEducation", v)} options={educationOptions} placeholder="Current Education Level" />
                 <input style={iStyle} className={iCls} placeholder="School / College Name" required value={sf.schoolName} onChange={e => setSF("schoolName", e.target.value)} />
                 <div className="grid grid-cols-2 gap-2">
-                  <input style={iStyle} className={iCls} placeholder="Teacher's Name" required value={sf.teacherName} onChange={e => setSF("teacherName", e.target.value)} />
-                  <input style={iStyle} className={iCls} placeholder="Teacher's Phone" type="tel" inputMode="numeric" required value={sf.teacherPhone} onChange={e => setSF("teacherPhone", e.target.value.replace(/\D/g, "").slice(0, 10))} />
+                  <input style={iStyle} className={iCls} placeholder="Teacher Full Name" required value={sf.teacherName} onChange={e => setSF("teacherName", e.target.value)} />
+                  <input
+                    style={{
+                      ...iStyle,
+                      ...(teacherPhoneMatchesStudent(sf.teacherPhone, phone)
+                        ? { border: "1px solid rgba(248,113,113,0.85)" }
+                        : {}),
+                    }}
+                    className={iCls}
+                    placeholder="Teacher's Phone"
+                    type="tel"
+                    inputMode="numeric"
+                    required
+                    value={sf.teacherPhone}
+                    onChange={e => setSF("teacherPhone", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  />
                 </div>
+                {teacherPhoneMatchesStudent(sf.teacherPhone, phone) ? (
+                  <p className="text-[11px] font-medium text-red-400">{TEACHER_PHONE_SAME_AS_STUDENT_MSG}</p>
+                ) : null}
                 <input style={iStyle} className={iCls} placeholder="Teaching Subject" required value={sf.teachingSubject} onChange={e => setSF("teachingSubject", e.target.value)} />
               </div>
             )}
@@ -484,8 +506,12 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
             )}
 
             {role && (
-              <button type="submit" disabled={loading} className="w-full h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 mt-1 disabled:opacity-60"
-                style={{ background: "linear-gradient(135deg,#9B2020,#7A1515)", color: "#fff", boxShadow: "0 4px 16px rgba(107,18,18,0.5)" }}>
+              <button
+                type="submit"
+                disabled={loading || (role === "student" && teacherPhoneMatchesStudent(sf.teacherPhone, phone))}
+                className="w-full h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 mt-1 disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg,#9B2020,#7A1515)", color: "#fff", boxShadow: "0 4px 16px rgba(107,18,18,0.5)" }}
+              >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Next — Tell Us More <ArrowRight className="w-3.5 h-3.5" /></>}
               </button>
             )}

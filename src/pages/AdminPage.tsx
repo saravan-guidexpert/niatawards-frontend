@@ -62,9 +62,29 @@ const STAGE_LABELS: Record<string, string> = {
   otp_sent: "OTP sent",
   otp_verified: "OTP verified",
   details: "Details filled",
+  submitted: "Submitted",
 };
 
-const stageLabel = (n: any) => (isIncomplete(n) ? STAGE_LABELS[n.form_step] || "Started" : "—");
+const FUNNEL_FILTERS = [
+  { value: "All", label: "All funnel" },
+  { value: "otp_requested", label: "OTP requested" },
+  { value: "otp_verified", label: "OTP verified" },
+  { value: "form_step1", label: "Details filled" },
+  { value: "submitted", label: "Submitted" },
+] as const;
+
+/** Maps a nomination to the same funnel ids used in Funnel Analytics. */
+const nominationFunnelStage = (n: any) => {
+  if (!isIncomplete(n) || n.form_step === "submitted") return "submitted";
+  if (n.form_step === "details") return "form_step1";
+  if (n.form_step === "otp_verified" || n.phone_verified) return "otp_verified";
+  return "otp_requested";
+};
+
+const stageLabel = (n: any) => {
+  if (!isIncomplete(n) || n.form_step === "submitted") return "Submitted";
+  return STAGE_LABELS[n.form_step] || "Started";
+};
 
 const COPY_HEADERS = [
   "Type", "Teacher/Applicant", "Student", "School", "Category", "Class",
@@ -84,7 +104,7 @@ const nominationRow = (n: any) => [
   n.nominator_name || "",
   n.nominator_phone || "",
   n.status || "",
-  isIncomplete(n) ? stageLabel(n) : "",
+  stageLabel(n),
   n.created_at ? formatDateIn(n.created_at) : "",
   n.photo_url || "",
   n.special_thing || "",
@@ -464,7 +484,7 @@ const EditModal = ({ nomination, onClose, onSave }: { nomination: any; onClose: 
             {nomination.type === "student" ? (
               <>
                 <div>
-                  <Label className="text-white/60 text-xs mb-1.5 block">Teacher's Name</Label>
+                  <Label className="text-white/60 text-xs mb-1.5 block">Teacher Full Name</Label>
                   <Input value={form.teacher_name || ""} onChange={e => set("teacher_name", e.target.value)}
                     className="bg-white/5 border-white/10 text-white placeholder:text-white/25" />
                 </div>
@@ -574,6 +594,7 @@ const AdminPage = () => {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [funnelFilter, setFunnelFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
   const [sourceFilter, setSourceFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
@@ -663,10 +684,11 @@ const AdminPage = () => {
     const matchSearch = haystack.some(v => String(v || "").toLowerCase().includes(q));
     const matchCategory = categoryFilter === "All" || n.award_category === categoryFilter;
     const matchStatus = statusFilter === "All" || n.status === statusFilter;
+    const matchFunnel = funnelFilter === "All" || nominationFunnelStage(n) === funnelFilter;
     const matchType = typeFilter === "All" || n.type === typeFilter;
     const matchSource = sourceFilter === "All" || utmSourceKey(n) === sourceFilter;
     const matchDate = !dateFilter || istDayKey(n.created_at) === istDayKey(dateFilter);
-    return matchSearch && matchCategory && matchStatus && matchType && matchSource && matchDate;
+    return matchSearch && matchCategory && matchStatus && matchFunnel && matchType && matchSource && matchDate;
   });
 
   const categories = ["All", ...Array.from(new Set(nominations.map(n => n.award_category).filter(Boolean)))];
@@ -822,9 +844,18 @@ const AdminPage = () => {
             <FunnelAnalytics
               dateKey={dateFilter ? istDayKey(dateFilter) : undefined}
               onStageClick={(stageId) => {
-                if (stageId === "submitted") setStatusFilter("All");
-                if (stageId === "shortlisted") setStatusFilter("shortlisted");
-                if (stageId === "winners") setStatusFilter("winner");
+                if (stageId === "shortlisted") {
+                  setFunnelFilter("All");
+                  setStatusFilter("shortlisted");
+                  return;
+                }
+                if (stageId === "winners") {
+                  setFunnelFilter("All");
+                  setStatusFilter("winner");
+                  return;
+                }
+                setStatusFilter("All");
+                setFunnelFilter(stageId);
               }}
             />
             {/* Shortlisted → voting banner */}
@@ -1006,6 +1037,14 @@ const AdminPage = () => {
                           ))}
                         </SelectContent>
                       </Select>
+                      <Select value={funnelFilter} onValueChange={setFunnelFilter}>
+                        <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[130px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {FUNNEL_FILTERS.map((s) => (
+                            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Select value={typeFilter} onValueChange={setTypeFilter}>
                         <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[100px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -1048,9 +1087,7 @@ const AdminPage = () => {
                         <StatusBadge status={n.status} />
                         <UtmChip n={n} />
                       </div>
-                      {isIncomplete(n) && (
-                        <p className="text-xs text-primary-foreground/50">Stage: {stageLabel(n)}</p>
-                      )}
+                      <p className="text-xs text-primary-foreground/50">Stage: {stageLabel(n)}</p>
                       <h3 className="font-heading font-bold text-white text-lg leading-tight">{displayName(n)}</h3>
                       <p className="text-sm text-primary-foreground/60">{n.school_name || "—"}</p>
                       {n.student_name && <p className="text-xs text-primary-foreground/45">Student: {n.student_name}</p>}

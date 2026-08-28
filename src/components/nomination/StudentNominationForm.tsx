@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { createNomination } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import TeacherPhotoUpload from "@/components/nomination/TeacherPhotoUpload";
+import { TEACHER_PHONE_SAME_AS_STUDENT_MSG, teacherPhoneMatchesStudent } from "@/lib/utils";
 
 const awardCategories = [
   "Student Transformation Award",
@@ -96,6 +96,10 @@ const StudentNominationForm = () => {
       toast({ title: "Please enter a valid 10-digit teacher phone number", variant: "destructive" });
       return;
     }
+    if (teacherPhoneMatchesStudent(form.teacherPhone, user?.phone || "")) {
+      toast({ title: TEACHER_PHONE_SAME_AS_STUDENT_MSG, variant: "destructive" });
+      return;
+    }
     // Honeypot
     const honeypot = (document.getElementById("_hp_field") as HTMLInputElement)?.value;
     if (honeypot) { navigate("/thank-you"); return; }
@@ -109,6 +113,7 @@ const StudentNominationForm = () => {
       }
       await createNomination({
         type:              "student",
+        nominator_phone:   user?.phone || null,
         student_name:      form.studentName.trim(),
         student_class:     form.currentEducation,
         school_name:       form.schoolName.trim(),
@@ -173,7 +178,7 @@ const StudentNominationForm = () => {
 
         {/* Teacher Name */}
         <div>
-          <Label>Teacher's Name</Label>
+          <Label>Teacher Full Name</Label>
           <Input className="mt-1.5 h-12 text-base" value={form.teacherName}
             onChange={(e) => set("teacherName", e.target.value)} required />
         </div>
@@ -181,10 +186,13 @@ const StudentNominationForm = () => {
         {/* Teacher Phone */}
         <div>
           <Label>Teacher Phone Number</Label>
-          <Input className="mt-1.5 h-12 text-base" type="tel" inputMode="numeric"
+          <Input className={`mt-1.5 h-12 text-base ${teacherPhoneMatchesStudent(form.teacherPhone, user?.phone || "") ? "border-red-500 focus-visible:ring-red-500" : ""}`} type="tel" inputMode="numeric"
             value={form.teacherPhone}
             onChange={(e) => set("teacherPhone", e.target.value.replace(/\D/g, "").slice(0, 10))}
             placeholder="10-digit mobile number" required />
+          {teacherPhoneMatchesStudent(form.teacherPhone, user?.phone || "") ? (
+            <p className="mt-1.5 text-sm font-medium text-red-600">{TEACHER_PHONE_SAME_AS_STUDENT_MSG}</p>
+          ) : null}
         </div>
 
         {/* Teaching Subject */}
@@ -292,7 +300,7 @@ const StudentNominationForm = () => {
         <TeacherPhotoUpload value={photoUrl} onChange={setPhotoUrl} variant="light" onBusyChange={setPhotoBusy} />
 
         <Button id="btn-student-form-submit" type="submit" variant="hero" size="lg"
-          className="w-full h-14 rounded-xl text-base font-bold" disabled={loading || photoBusy}>
+          className="w-full h-14 rounded-xl text-base font-bold" disabled={loading || photoBusy || teacherPhoneMatchesStudent(form.teacherPhone, user?.phone || "")}>
           {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit Nomination"}
         </Button>
 
