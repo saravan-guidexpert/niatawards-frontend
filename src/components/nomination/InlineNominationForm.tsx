@@ -123,7 +123,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
   const phone = user?.phone || userPhone;
   const [role, setRole] = useState<NominationFormRole>(lockedRole);
 
-  const [formStep, setFormStep] = useState<1 | 2>(1);
+  const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading]   = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -369,6 +369,35 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     }
   };
 
+  const handleStep2Next = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isNominateForm(role)) {
+      if (!sf.specialThing.trim()) {
+        toast({ title: "Please fill in what's special about this teacher", variant: "destructive" });
+        return;
+      }
+    } else if (!tf.impactStory.trim()) {
+      toast({ title: "Please share your impact story", variant: "destructive" });
+      return;
+    }
+    if (!token) { toast({ title: "Please verify OTP first", variant: "destructive" }); return; }
+    setLoading(true);
+    try {
+      await updateNominationDraft({ draft_token: token, ...step2Payload() });
+      track("form_step3_opened", { role });
+      skipDebounceRef.current = true;
+      setFormStep(3);
+    } catch (err: any) {
+      toast({
+        title: "Could not save details",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -436,7 +465,13 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     if (token && !submittingRef.current) {
       updateNominationDraft({ draft_token: token, ...step2Payload() }).catch(() => undefined);
     }
+    skipDebounceRef.current = true;
     setFormStep(1);
+  };
+
+  const handleBackToStory = () => {
+    skipDebounceRef.current = true;
+    setFormStep(2);
   };
 
   const formContent = (
@@ -459,13 +494,15 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
                 </span>
               </div>
             ) : (
-              <p className="text-white/45 text-[10px]">Step {formStep} of 2 — {formStep === 1 ? "Basic Details" : "Tell Us More"}</p>
+              <p className="text-white/45 text-[10px]">
+                Step {formStep} of 3 — {formStep === 1 ? "Basic Details" : formStep === 2 ? "Tell Us More" : "Photo"}
+              </p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-1">
-            {[1, 2].map(s => (
+            {[1, 2, 3].map(s => (
               <div key={s} className="h-1.5 rounded-full transition-all duration-300"
                 style={{ width: formStep === s ? "20px" : "8px", background: formStep >= s ? "#d97706" : "rgba(255,255,255,0.2)" }} />
             ))}
@@ -579,33 +616,48 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
         {/* ── STEP 2 ── */}
         {formStep === 2 && (
           <motion.form key="step2" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
-            onSubmit={handleSubmit} noValidate className="space-y-2">
+            onSubmit={handleStep2Next} noValidate className="space-y-2">
 
             {isNominateForm(role) && (
               <div className="space-y-2">
                 <FormTextarea id="nom-special-thing" label="What's special about this teacher?" value={sf.specialThing} onChange={(v) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
                 <FormTextarea id="nom-impact-story" label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." optional rows={3} />
-                <label htmlFor="nom-awards" className="sr-only">Awards / Recognition (Optional)</label>
-                <input id="nom-awards" style={iStyle} className={iCls} placeholder="Awards / Recognition (Optional)" value={sf.awardsRecognition} onChange={e => setSF("awardsRecognition", e.target.value)} />
-                <label htmlFor="nom-teacher-social" className="sr-only">Teacher's LinkedIn / Social Media (Optional)</label>
-                <input id="nom-teacher-social" style={iStyle} className={iCls} placeholder="Teacher's LinkedIn / Social Media (Optional)" value={sf.teacherSocial} onChange={e => setSF("teacherSocial", e.target.value)} />
-                <Suspense fallback={<PhotoUploadFallback />}>
-                  <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
-                </Suspense>
               </div>
             )}
 
             {role === "teacher" && (
               <div className="space-y-2">
                 <FormTextarea id="nom-self-impact" label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
-                <Suspense fallback={<PhotoUploadFallback />}>
-                  <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
-                </Suspense>
               </div>
             )}
 
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={handleBackToDetails}
+                className="h-10 px-4 rounded-lg font-semibold text-[13px] flex items-center gap-1 text-white/60 hover:text-white transition-all"
+                style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }}>
+                <ChevronDown className="w-3.5 h-3.5 rotate-90" /> Back
+              </button>
+              <button type="submit" disabled={loading}
+                className="flex-1 h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 disabled:opacity-60"
+                style={{ background: "linear-gradient(135deg,#9B2020,#7A1515)", color: "#fff", boxShadow: "0 4px 16px rgba(107,18,18,0.5)" }}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Next — Add Photo <ArrowRight className="w-3.5 h-3.5" /></>}
+              </button>
+            </div>
+          </motion.form>
+        )}
+
+        {/* ── STEP 3 ── */}
+        {formStep === 3 && (
+          <motion.form key="step3" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
+            onSubmit={handleSubmit} noValidate className="space-y-3">
+            <p className="text-[13px] text-white/80 leading-snug">
+              If you have a photo, add it here — or else submit directly.
+            </p>
+            <Suspense fallback={<PhotoUploadFallback />}>
+              <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
+            </Suspense>
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={handleBackToStory}
                 className="h-10 px-4 rounded-lg font-semibold text-[13px] flex items-center gap-1 text-white/60 hover:text-white transition-all"
                 style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <ChevronDown className="w-3.5 h-3.5 rotate-90" /> Back
