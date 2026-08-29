@@ -1,8 +1,9 @@
 /**
- * Third-party tags (GA4, Google Ads, Meta Pixel, Snap Pixel, Clarity).
+ * Third-party tags (GA4, Google Ads, Snap Pixel, Clarity).
+ * Meta Pixel loads only on /thank-you via trackThankYouPixel().
  *
  * Stubs queue events immediately so React/gtag/snaptr calls are not lost.
- * Network scripts load after first paint (GA/Ads/Pixel/Snap) or on idle (Clarity).
+ * Network scripts load after first paint (GA/Ads/Snap) or on idle (Clarity).
  * Each provider is injected at most once.
  */
 
@@ -130,6 +131,17 @@ function loadPixel() {
   injectScript(SCRIPT_PIXEL, "https://connect.facebook.net/en_US/fbevents.js");
 }
 
+/** Meta Pixel lives only on /thank-you — not in index.html or sitewide bootstrap. */
+export function trackThankYouPixel() {
+  installPixelStub();
+  if (!pixelQueued) {
+    queuePixelBootstrap();
+  } else {
+    window.fbq!("track", "PageView");
+  }
+  loadPixel();
+}
+
 function installSnapStub() {
   if (typeof window.snaptr === "function") return;
   const snaptr = function () {
@@ -173,14 +185,11 @@ export function scheduleThirdPartyTracking() {
 
   installGtagStub();
   queueGtagBootstrap();
-  installPixelStub();
-  queuePixelBootstrap();
   installSnapStub();
   queueSnapBootstrap();
 
   afterFirstPaint(() => {
     loadGtag();
-    loadPixel();
     loadSnap();
   });
   whenIdle(() => {

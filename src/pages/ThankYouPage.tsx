@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CheckCircle, Share2, ArrowRight } from "lucide-react";
 import Navbar from "@/components/landing/Navbar";
 import Footer from "@/components/landing/Footer";
+import { trackThankYouPixel } from "@/lib/thirdPartyTracking";
 
 const SITE_URL = "https://www.niatawards.in";
 
@@ -10,6 +12,10 @@ const ThankYouPage = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const isTeacher = params.get("type") === "teacher";
+
+  useEffect(() => {
+    trackThankYouPixel();
+  }, []);
 
   const caption = isTeacher
     ? `I just nominated myself for NIAT Guru Ratna Awards 2026! Nominate yours too: ${SITE_URL}`
@@ -21,6 +27,15 @@ const ThankYouPage = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col" id="main-content" role="main">
+      <noscript>
+        <img
+          height={1}
+          width={1}
+          style={{ display: "none" }}
+          src="https://www.facebook.com/tr?id=618460890635684&ev=PageView&noscript=1"
+          alt=""
+        />
+      </noscript>
       <Navbar />
       <div className="flex-1 flex items-center justify-center px-4 py-12 pt-[56px]">
         <div className="w-full max-w-md text-center">
