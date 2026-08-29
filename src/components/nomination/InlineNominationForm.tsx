@@ -5,7 +5,7 @@ import { ChevronDown, CheckCircle2, Loader2, ArrowRight, User } from "lucide-rea
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { createNominationDraft, getNominationDraft, updateNominationDraft, type NominationDraft } from "@/lib/api";
-import { clearDraftSession, getDraftSession, saveDraftSession } from "@/lib/nominationDraft";
+import { apiTypeFromRole, clearDraftSession, getDraftSession, saveDraftSession, type NominationFormRole } from "@/lib/nominationDraft";
 import { TEACHER_PHONE_SAME_AS_STUDENT_MSG, teacherPhoneMatchesStudent } from "@/lib/utils";
 import { trackFunnel } from "@/lib/funnel";
 
@@ -88,15 +88,23 @@ const FormTextarea = ({
   </div>
 );
 
-const ROLE_LABELS: Record<"student" | "teacher", string> = {
+const TEACHER_OTHER_EDUCATION = "Teacher / Colleague";
+
+const ROLE_LABELS: Record<NominationFormRole, string> = {
   student: "🎓 Student / Parent",
-  teacher: "👩‍🏫 Teacher (Self-Nomination)",
+  teacher: "👩‍🏫 Teacher / Self-Nomination",
+  teacher_other: "👩‍🏫 Teacher / Nominate Others",
 };
 
-const ROLE_BY_LABEL: Record<string, "student" | "teacher"> = {
+const ROLE_OPTIONS = [ROLE_LABELS.student, ROLE_LABELS.teacher, ROLE_LABELS.teacher_other];
+
+const ROLE_BY_LABEL: Record<string, NominationFormRole> = {
   [ROLE_LABELS.student]: "student",
   [ROLE_LABELS.teacher]: "teacher",
+  [ROLE_LABELS.teacher_other]: "teacher_other",
 };
+
+const isNominateForm = (role: NominationFormRole) => role !== "teacher";
 
 interface Props {
   userName?: string;
@@ -113,7 +121,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
 
   const name  = user?.name  || userName;
   const phone = user?.phone || userPhone;
-  const [role, setRole] = useState<"student" | "teacher">(lockedRole);
+  const [role, setRole] = useState<NominationFormRole>(lockedRole);
 
   const [formStep, setFormStep] = useState<1 | 2>(1);
   const [loading, setLoading]   = useState(false);
@@ -146,7 +154,12 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
   const applyDraft = (draft: NominationDraft) => {
     // The saved draft wins over the page default, so a chosen role survives a reload.
     const draftType = asText(draft.type);
-    if (draftType === "student" || draftType === "teacher") setRole(draftType);
+    if (draftType === "teacher") {
+      setRole("teacher");
+    } else if (draftType === "student") {
+      const sessionRole = getDraftSession()?.type;
+      setRole(sessionRole === "teacher_other" ? "teacher_other" : "student");
+    }
     const teacherName = asText(draft.teacher_name);
     const nominatorPhone = asText(draft.nominator_phone) || phone.replace(/\D/g, "").slice(-10);
     const savedPhone = asText(draft.phone);
@@ -190,7 +203,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
   };
 
   const step2Payload = () =>
-    role === "student"
+    isNominateForm(role)
       ? {
           special_thing: sf.specialThing.trim() || null,
           impact_story: sf.impactStory.trim() || null,
@@ -227,7 +240,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     if (token || !name.trim() || phone.replace(/\D/g, "").length < 10) return;
     let cancelled = false;
     createNominationDraft({
-      type: role,
+      type: apiTypeFromRole(role),
       nominator_name: name.trim(),
       nominator_phone: phone,
       resume: true,
@@ -276,20 +289,31 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     "Undergraduate / College", "Postgraduate / College", "All Classes",
   ];
 
-  const handleRoleChange = (next: "student" | "teacher") => {
+  const handleRoleChange = (next: NominationFormRole) => {
     if (next === role) return;
+    const prevApi = apiTypeFromRole(role);
+    const nextApi = apiTypeFromRole(next);
     setRole(next);
     setFormStep(1);
+    if (next === "student") {
+      setSf((prev) =>
+        prev.currentEducation === TEACHER_OTHER_EDUCATION
+          ? { ...prev, currentEducation: "" }
+          : prev
+      );
+    }
     if (!token) return;
     const session = getDraftSession();
     if (session?.token === token) saveDraftSession({ ...session, type: next });
-    updateNominationDraft({ draft_token: token, type: next }).catch(() => undefined);
+    if (prevApi !== nextApi) {
+      updateNominationDraft({ draft_token: token, type: nextApi }).catch(() => undefined);
+    }
   };
 
   const handleStep1Next = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (role === "student") {
-      if (!sf.currentEducation) { toast({ title: "Please select your current education", variant: "destructive" }); return; }
+    if (isNominateForm(role)) {
+      if (role === "student" && !sf.currentEducation) { toast({ title: "Please select your current education", variant: "destructive" }); return; }
       if (!sf.schoolName.trim()) { toast({ title: "Please enter school / college name", variant: "destructive" }); return; }
       if (!sf.teacherName.trim()) { toast({ title: "Please enter the teacher's full name", variant: "destructive" }); return; }
       if (sf.teacherPhone.replace(/\D/g, "").length < 10) { toast({ title: "Please enter a valid teacher phone number", variant: "destructive" }); return; }
@@ -308,12 +332,12 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     if (!token) { toast({ title: "Please verify OTP first", variant: "destructive" }); return; }
     setLoading(true);
     try {
-      const payload = role === "student"
+      const payload = isNominateForm(role)
         ? {
             draft_token: token,
             form_step: "details",
             student_name: sf.studentName.trim(),
-            student_class: sf.currentEducation,
+            student_class: role === "teacher_other" ? TEACHER_OTHER_EDUCATION : sf.currentEducation,
             school_name: sf.schoolName.trim(),
             teacher_name: sf.teacherName.trim(),
             phone: sf.teacherPhone.trim(),
@@ -331,7 +355,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
           };
       await updateNominationDraft(payload);
       track("form_step2_opened", { role });
-      if (phone) trackFunnel("form_step1", phone, role);
+      if (phone) trackFunnel("form_step1", phone, apiTypeFromRole(role));
       skipDebounceRef.current = true;
       setFormStep(2);
     } catch (err: any) {
@@ -352,13 +376,13 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     try {
       if (!token) throw new Error("Please verify OTP first");
       if (photoBusy) throw new Error("Please wait for the photo to finish uploading");
-      if (role === "student") {
+      if (isNominateForm(role)) {
         if (!sf.specialThing.trim()) throw new Error("Please fill in what's special about this teacher");
         await updateNominationDraft({
           draft_token: token,
           complete: true,
           student_name: sf.studentName.trim(),
-          student_class: sf.currentEducation,
+          student_class: role === "teacher_other" ? TEACHER_OTHER_EDUCATION : sf.currentEducation,
           school_name: sf.schoolName.trim(),
           phone: sf.teacherPhone.trim(),
           teacher_name: sf.teacherName.trim(),
@@ -388,7 +412,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
       }
       clearDraftSession();
       track("nomination_submitted", { role });
-      navigate(`/thank-you?type=${role}`);
+      navigate(`/thank-you?type=${apiTypeFromRole(role)}`);
     } catch (err: any) {
       submittingRef.current = false;
       console.error("Nomination submit failed:", err);
@@ -460,19 +484,26 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
               <CustomSelect
                 id="nom-role"
                 value={ROLE_LABELS[role]}
-                onChange={(label) => handleRoleChange(ROLE_BY_LABEL[label])}
-                options={Object.values(ROLE_LABELS)}
+                onChange={(label) => {
+                  const next = ROLE_BY_LABEL[label];
+                  if (next) handleRoleChange(next);
+                }}
+                options={ROLE_OPTIONS}
                 placeholder="Select who you are"
               />
             </div>
 
-            {/* Student Step 1 */}
-            {role === "student" && (
+            {/* Student / teacher-nominating-others Step 1 */}
+            {isNominateForm(role) && (
               <div className="space-y-2">
                 <label htmlFor="nom-student-name" className="sr-only">Your Full Name</label>
                 <input id="nom-student-name" style={iStyle} className={iCls} placeholder="Your Full Name" required value={sf.studentName} onChange={e => setSF("studentName", e.target.value)} />
-                <label htmlFor="nom-student-education" className="sr-only">Current Education Level</label>
-                <CustomSelect id="nom-student-education" value={sf.currentEducation} onChange={v => setSF("currentEducation", v)} options={educationOptions} placeholder="Current Education Level" />
+                {role === "student" && (
+                  <>
+                    <label htmlFor="nom-student-education" className="sr-only">Current Education Level</label>
+                    <CustomSelect id="nom-student-education" value={sf.currentEducation} onChange={v => setSF("currentEducation", v)} options={educationOptions} placeholder="Current Education Level" />
+                  </>
+                )}
                 <label htmlFor="nom-school-name" className="sr-only">School / College Name</label>
                 <input id="nom-school-name" style={iStyle} className={iCls} placeholder="School / College Name" required value={sf.schoolName} onChange={e => setSF("schoolName", e.target.value)} />
                 <div className="grid grid-cols-2 gap-2">
@@ -535,7 +566,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
             {role && (
               <button
                 type="submit"
-                disabled={loading || (role === "student" && teacherPhoneMatchesStudent(sf.teacherPhone, phone))}
+                disabled={loading || (isNominateForm(role) && teacherPhoneMatchesStudent(sf.teacherPhone, phone))}
                 className="w-full h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 mt-1 disabled:opacity-60"
                 style={{ background: "linear-gradient(135deg,#9B2020,#7A1515)", color: "#fff", boxShadow: "0 4px 16px rgba(107,18,18,0.5)" }}
               >
@@ -550,7 +581,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
           <motion.form key="step2" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
             onSubmit={handleSubmit} noValidate className="space-y-2">
 
-            {role === "student" && (
+            {isNominateForm(role) && (
               <div className="space-y-2">
                 <FormTextarea id="nom-special-thing" label="What's special about this teacher?" value={sf.specialThing} onChange={(v) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
                 <FormTextarea id="nom-impact-story" label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." optional rows={3} />

@@ -1,9 +1,15 @@
 const STORAGE_KEY = "niat_draft";
 
+export type NominationFormRole = "student" | "teacher" | "teacher_other";
+export type NominationApiType = "student" | "teacher";
+
+export const apiTypeFromRole = (role: NominationFormRole): NominationApiType =>
+  role === "teacher" ? "teacher" : "student";
+
 export type DraftSession = {
   id: string;
   token: string;
-  type: "student" | "teacher";
+  type: NominationFormRole;
   phone: string;
 };
 
