@@ -146,7 +146,7 @@ const TeacherPhotoUpload = ({ value, onChange, variant = "dark", onBusyChange }:
             <ImagePlus className="w-5 h-5" />
           )}
           <span className="text-[12px] font-medium">
-            {previewBroken ? "Photo selected (preview unavailable)" : "Add a photo of the teacher"}
+            {previewBroken ? "Photo selected (preview unavailable)" : "If you have photo add here or else submit directly"}
           </span>
           <span className={`text-[10px] ${dark ? "text-white/35" : "text-foreground/45"}`}>
             JPG, PNG, WebP, or HEIC

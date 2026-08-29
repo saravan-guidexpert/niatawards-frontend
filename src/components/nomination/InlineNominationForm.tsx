@@ -123,7 +123,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
   const phone = user?.phone || userPhone;
   const [role, setRole] = useState<NominationFormRole>(lockedRole);
 
-  const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
+  const [formStep, setFormStep] = useState<1 | 2>(1);
   const [loading, setLoading]   = useState(false);
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -237,7 +237,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
   }, [token]);
 
   useEffect(() => {
-    if (token || !name.trim() || phone.replace(/\D/g, "").length < 10) return;
+    if (!user || !name.trim() || phone.replace(/\D/g, "").length < 10) return;
     let cancelled = false;
     createNominationDraft({
       type: apiTypeFromRole(role),
@@ -254,10 +254,10 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [token, name, phone, role]);
+  }, [user, name, phone, role]);
 
   useEffect(() => {
-    if (formStep !== 2 || !token || !hydratedRef.current || submittingRef.current) return;
+    if (formStep !== 1 || !token || !hydratedRef.current || submittingRef.current) return;
     if (skipDebounceRef.current) {
       skipDebounceRef.current = false;
       return;
@@ -310,6 +310,21 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     }
   };
 
+  const ensureDraftToken = async () => {
+    if (user && name.trim() && phone.replace(/\D/g, "").length >= 10) {
+      const draft = await createNominationDraft({
+        type: apiTypeFromRole(role),
+        nominator_name: name.trim(),
+        nominator_phone: phone,
+        resume: true,
+      });
+      rememberSession(draft, phone);
+      return String(draft.draft_token);
+    }
+    if (token) return token;
+    throw new Error("Please verify OTP first");
+  };
+
   const handleStep1Next = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isNominateForm(role)) {
@@ -322,19 +337,21 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
         return;
       }
       if (!sf.teachingSubject.trim()) { toast({ title: "Please enter the teaching subject", variant: "destructive" }); return; }
+      if (!sf.specialThing.trim()) { toast({ title: "Please fill in what's special about this teacher", variant: "destructive" }); return; }
     } else {
       if (!tf.school.trim()) { toast({ title: "Please enter school / college name", variant: "destructive" }); return; }
       if (tf.phone.replace(/\D/g, "").length < 10) { toast({ title: "Please enter a valid phone number", variant: "destructive" }); return; }
       if (!tf.subject.trim()) { toast({ title: "Please enter your subject", variant: "destructive" }); return; }
       if (!tf.experience) { toast({ title: "Please enter years of experience", variant: "destructive" }); return; }
       if (!tf.classesTeaching) { toast({ title: "Please select which class you teach", variant: "destructive" }); return; }
+      if (!tf.impactStory.trim()) { toast({ title: "Please share your impact story", variant: "destructive" }); return; }
     }
-    if (!token) { toast({ title: "Please verify OTP first", variant: "destructive" }); return; }
     setLoading(true);
     try {
+      const draftToken = await ensureDraftToken();
       const payload = isNominateForm(role)
         ? {
-            draft_token: token,
+            draft_token: draftToken,
             form_step: "details",
             student_name: sf.studentName.trim(),
             student_class: role === "teacher_other" ? TEACHER_OTHER_EDUCATION : sf.currentEducation,
@@ -342,9 +359,10 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
             teacher_name: sf.teacherName.trim(),
             phone: sf.teacherPhone.trim(),
             subject: sf.teachingSubject.trim(),
+            special_thing: sf.specialThing.trim(),
           }
         : {
-            draft_token: token,
+            draft_token: draftToken,
             form_step: "details",
             full_name: tf.fullName.trim(),
             school_name: tf.school.trim(),
@@ -352,6 +370,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
             subject: tf.subject.trim(),
             experience: tf.experience,
             student_class: tf.classesTeaching,
+            impact_story: tf.impactStory.trim(),
           };
       await updateNominationDraft(payload);
       track("form_step2_opened", { role });
@@ -369,46 +388,17 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     }
   };
 
-  const handleStep2Next = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isNominateForm(role)) {
-      if (!sf.specialThing.trim()) {
-        toast({ title: "Please fill in what's special about this teacher", variant: "destructive" });
-        return;
-      }
-    } else if (!tf.impactStory.trim()) {
-      toast({ title: "Please share your impact story", variant: "destructive" });
-      return;
-    }
-    if (!token) { toast({ title: "Please verify OTP first", variant: "destructive" }); return; }
-    setLoading(true);
-    try {
-      await updateNominationDraft({ draft_token: token, ...step2Payload() });
-      track("form_step3_opened", { role });
-      skipDebounceRef.current = true;
-      setFormStep(3);
-    } catch (err: any) {
-      toast({
-        title: "Could not save details",
-        description: err.message || "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     submittingRef.current = true;
     try {
-      if (!token) throw new Error("Please verify OTP first");
+      const draftToken = await ensureDraftToken();
       if (photoBusy) throw new Error("Please wait for the photo to finish uploading");
       if (isNominateForm(role)) {
         if (!sf.specialThing.trim()) throw new Error("Please fill in what's special about this teacher");
         await updateNominationDraft({
-          draft_token: token,
+          draft_token: draftToken,
           complete: true,
           student_name: sf.studentName.trim(),
           student_class: role === "teacher_other" ? TEACHER_OTHER_EDUCATION : sf.currentEducation,
@@ -426,7 +416,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
       } else {
         if (!tf.impactStory.trim()) throw new Error("Please share your impact story");
         await updateNominationDraft({
-          draft_token: token,
+          draft_token: draftToken,
           complete: true,
           full_name: tf.fullName.trim(),
           school_name: tf.school.trim(),
@@ -469,11 +459,6 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
     setFormStep(1);
   };
 
-  const handleBackToStory = () => {
-    skipDebounceRef.current = true;
-    setFormStep(2);
-  };
-
   const formContent = (
     <div className={embedded ? "" : "p-4"}>
       {/* Header */}
@@ -495,14 +480,14 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
               </div>
             ) : (
               <p className="text-white/45 text-[10px]">
-                Step {formStep} of 3 — {formStep === 1 ? "Basic Details" : formStep === 2 ? "Tell Us More" : "Photo"}
+                Step {formStep} of 2 — {formStep === 1 ? "Basic Details" : "Photo"}
               </p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-1">
-            {[1, 2, 3].map(s => (
+            {[1, 2].map(s => (
               <div key={s} className="h-1.5 rounded-full transition-all duration-300"
                 style={{ width: formStep === s ? "20px" : "8px", background: formStep >= s ? "#d97706" : "rgba(255,255,255,0.2)" }} />
             ))}
@@ -573,6 +558,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
                 ) : null}
                 <label htmlFor="nom-teaching-subject" className="sr-only">Teaching Subject</label>
                 <input id="nom-teaching-subject" style={iStyle} className={iCls} placeholder="Teaching Subject" required value={sf.teachingSubject} onChange={e => setSF("teachingSubject", e.target.value)} />
+                <FormTextarea id="nom-special-thing" label="What's special about this teacher?" value={sf.specialThing} onChange={(v) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
               </div>
             )}
 
@@ -597,6 +583,7 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
                 </div>
                 <label htmlFor="nom-self-classes" className="sr-only">Which Class Are You Teaching?</label>
                 <CustomSelect id="nom-self-classes" value={tf.classesTeaching} onChange={v => setTF("classesTeaching", v)} options={classesTeaching} placeholder="Which Class Are You Teaching?" />
+                <FormTextarea id="nom-self-impact" label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
               </div>
             )}
 
@@ -607,57 +594,24 @@ const InlineNominationForm = ({ userName = "", userPhone = "", embedded = false,
                 className="w-full h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 mt-1 disabled:opacity-60"
                 style={{ background: "linear-gradient(135deg,#9B2020,#7A1515)", color: "#fff", boxShadow: "0 4px 16px rgba(107,18,18,0.5)" }}
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Next — Tell Us More <ArrowRight className="w-3.5 h-3.5" /></>}
-              </button>
-            )}
-          </motion.form>
-        )}
-
-        {/* ── STEP 2 ── */}
-        {formStep === 2 && (
-          <motion.form key="step2" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
-            onSubmit={handleStep2Next} noValidate className="space-y-2">
-
-            {isNominateForm(role) && (
-              <div className="space-y-2">
-                <FormTextarea id="nom-special-thing" label="What's special about this teacher?" value={sf.specialThing} onChange={(v) => setSF("specialThing", v)} placeholder="One special thing about them..." required rows={2} />
-                <FormTextarea id="nom-impact-story" label="How have they impacted you?" value={sf.impactStory} onChange={(v) => setSF("impactStory", v)} placeholder="Write 2–3 sentences about their impact..." optional rows={3} />
-              </div>
-            )}
-
-            {role === "teacher" && (
-              <div className="space-y-2">
-                <FormTextarea id="nom-self-impact" label="Your Impact Story (2–3 sentences)" value={tf.impactStory} onChange={(v) => setTF("impactStory", v)} placeholder="How have you made a difference in students' lives..." required rows={4} />
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-1">
-              <button type="button" onClick={handleBackToDetails}
-                className="h-10 px-4 rounded-lg font-semibold text-[13px] flex items-center gap-1 text-white/60 hover:text-white transition-all"
-                style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }}>
-                <ChevronDown className="w-3.5 h-3.5 rotate-90" /> Back
-              </button>
-              <button type="submit" disabled={loading}
-                className="flex-1 h-10 rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 disabled:opacity-60"
-                style={{ background: "linear-gradient(135deg,#9B2020,#7A1515)", color: "#fff", boxShadow: "0 4px 16px rgba(107,18,18,0.5)" }}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Next — Add Photo <ArrowRight className="w-3.5 h-3.5" /></>}
               </button>
-            </div>
+            )}
           </motion.form>
         )}
 
-        {/* ── STEP 3 ── */}
-        {formStep === 3 && (
-          <motion.form key="step3" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
+        {/* ── STEP 2: optional photo ── */}
+        {formStep !== 1 && (
+          <motion.form key="step2" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
             onSubmit={handleSubmit} noValidate className="space-y-3">
             <p className="text-[13px] text-white/80 leading-snug">
-              If you have a photo, add it here — or else submit directly.
+              If you have photo add here or else submit directly
             </p>
             <Suspense fallback={<PhotoUploadFallback />}>
               <TeacherPhotoUpload value={photoUrl} onChange={handlePhotoChange} variant="dark" onBusyChange={setPhotoBusy} />
             </Suspense>
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={handleBackToStory}
+              <button type="button" onClick={handleBackToDetails}
                 className="h-10 px-4 rounded-lg font-semibold text-[13px] flex items-center gap-1 text-white/60 hover:text-white transition-all"
                 style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <ChevronDown className="w-3.5 h-3.5 rotate-90" /> Back

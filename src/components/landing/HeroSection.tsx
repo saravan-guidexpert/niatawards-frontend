@@ -169,21 +169,22 @@ const QuickNominateCard = ({ lockedRole }: { lockedRole: "student" | "teacher" }
   useEffect(() => {
     if (!isAuthenticated || skippedOtpRef.current) return;
     skippedOtpRef.current = true;
-    const nominatorName = user?.name || name;
-    const nominatorPhone = user?.phone || phone;
-    if (!nominatorName.trim() || nominatorPhone.replace(/\D/g, "").length < 10) {
-      setStep("nominate");
+    const nominatorName = (user?.name || name).trim();
+    const nominatorPhone = (user?.phone || phone).replace(/\D/g, "").slice(-10);
+    if (!nominatorName || nominatorPhone.length < 10) {
+      skippedOtpRef.current = false;
       return;
     }
-    const existing = getDraftSession();
-    if (existing?.token && existing.phone === nominatorPhone.replace(/\D/g, "").slice(-10)) {
-      setDraftToken(existing.token);
-      setStep("nominate");
-      return;
-    }
-    persistDraft(nominatorName.trim(), nominatorPhone, true)
-      .catch(() => undefined)
-      .finally(() => setStep("nominate"));
+    persistDraft(nominatorName, nominatorPhone, true)
+      .then(() => setStep("nominate"))
+      .catch(() => {
+        skippedOtpRef.current = false;
+        toast({
+          title: "Could not continue",
+          description: "Please verify OTP to fill the nomination form.",
+          variant: "destructive",
+        });
+      });
   }, [isAuthenticated]);
 
   const handleSend = async (resend = false) => {
