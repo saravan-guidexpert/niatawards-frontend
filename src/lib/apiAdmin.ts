@@ -391,3 +391,12 @@ export const adminWhatsAppResend = (id: string) =>
       body: JSON.stringify({ id }),
     }
   );
+
+export const adminWhatsAppRunRetries = () =>
+  adminRequest<{
+    ok: boolean;
+    scanned: number;
+    processed: number;
+    sent: number;
+    elapsedMs: number;
+  }>("/api/admin/whatsapp-ops/actions/run-retries", { method: "POST" });

@@ -22,6 +22,7 @@ import {
   adminGetWhatsAppRetryGroups,
   adminGetWhatsAppWebhooks,
   adminWhatsAppResend,
+  adminWhatsAppRunRetries,
   adminWhatsAppTestSend,
   type WhatsAppDayTotals,
   type WhatsAppOpsMessage,
@@ -152,6 +153,7 @@ const WhatsAppOpsPanel = () => {
   const [testParams, setTestParams] = useState("");
   const [sending, setSending] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [runningRetries, setRunningRetries] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -242,6 +244,26 @@ const WhatsAppOpsPanel = () => {
       toast({ title: "Test send failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRunRetries = async () => {
+    setRunningRetries(true);
+    try {
+      const result = await adminWhatsAppRunRetries();
+      toast({
+        title: result.sent > 0 ? `Retry wave sent ${result.sent} message${result.sent === 1 ? "" : "s"}` : "No failed messages left to retry",
+        description: `Scanned ${result.scanned} open group${result.scanned === 1 ? "" : "s"} in ${result.elapsedMs}ms`,
+      });
+      await load(page);
+    } catch (err: unknown) {
+      toast({
+        title: "Retry sweep failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setRunningRetries(false);
     }
   };
 
@@ -346,6 +368,18 @@ const WhatsAppOpsPanel = () => {
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={() => void load(page)}>
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </Button>
+            {superAdmin ? (
+              <Button
+                variant="hero-outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                disabled={runningRetries}
+                onClick={() => void handleRunRetries()}
+              >
+                {runningRetries ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Retry failed now
+              </Button>
+            ) : null}
           </div>
         </div>
 
