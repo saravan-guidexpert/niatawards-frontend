@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import {
-  BarChart3, Calendar as CalendarIcon, Copy, Download, ExternalLink, Link2, Loader2, Megaphone, MousePointerClick,
+  BarChart3, Calendar as CalendarIcon, Copy, Download, ExternalLink, Eye, Link2, Loader2, Megaphone, MousePointerClick,
   Search, Trophy, Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -120,6 +120,55 @@ const calendarLabel = (window: DayRange | undefined) => {
   return `${formatDayIn(window.from)} – ${formatDayIn(window.to)}`;
 };
 
+const uniqueNoms = (noms: any[]) => {
+  const seen = new Set<string>();
+  return noms.filter((n) => {
+    const id = String(n?.id || n?._id || "");
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
+const DateFilterButton = ({
+  value,
+  onChange,
+  emptyLabel,
+}: {
+  value: Date | undefined;
+  onChange: (next: Date | undefined) => void;
+  emptyLabel: string;
+}) => (
+  <Popover>
+    <PopoverTrigger asChild>
+      <button
+        type="button"
+        className={`inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border text-xs w-full min-w-0 ${
+          value
+            ? "bg-secondary/20 border-secondary text-secondary"
+            : "bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground"
+        }`}
+      >
+        <CalendarIcon className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
+        <span className="truncate">{value ? value.toLocaleDateString("en-IN") : emptyLabel}</span>
+      </button>
+    </PopoverTrigger>
+    <PopoverContent className="w-auto max-w-[calc(100vw-2rem)] p-3 bg-[#141414] border-white/10" align="start">
+      <Calendar mode="single" selected={value} onSelect={onChange} className="text-white" />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange(undefined)}
+          className="mt-2 w-full text-xs text-white/60 hover:text-white py-1.5 rounded-md hover:bg-white/5"
+        >
+          Clear date
+        </button>
+      )}
+    </PopoverContent>
+  </Popover>
+);
+
 const matchesLink = (n: { utm_source?: string; utm_medium?: string; utm_campaign?: string }, link: PromoLink) =>
   String(n.utm_source || "").trim().toLowerCase() === link.platform &&
   String(n.utm_medium || "").trim().toLowerCase() === link.influencer_slug &&
@@ -156,6 +205,10 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
   const [destFilter, setDestFilter] = useState("all");
   const [influencerQ, setInfluencerQ] = useState("");
   const [influencerPlatform, setInfluencerPlatform] = useState("all");
+  const [linkCreatedDate, setLinkCreatedDate] = useState<Date | undefined>();
+  const [linkNomsFilter, setLinkNomsFilter] = useState("all");
+  const [influencerDate, setInfluencerDate] = useState<Date | undefined>();
+  const [influencerNomsFilter, setInfluencerNomsFilter] = useState("all");
 
   const [name, setName] = useState("");
   const [platform, setPlatform] = useState<string>("instagram");
@@ -339,6 +392,10 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
     if (platformFilter !== "all" && link.platform !== platformFilter) return false;
     if (campaignFilter !== "all" && link.campaign !== campaignFilter) return false;
     if (destFilter !== "all" && link.destination !== destFilter) return false;
+    if (linkCreatedDate && (!link.created_at || istDayKey(link.created_at) !== istDayKey(linkCreatedDate))) return false;
+    const nomCount = nomsForLink(link).length;
+    if (linkNomsFilter === "yes" && nomCount === 0) return false;
+    if (linkNomsFilter === "no" && nomCount > 0) return false;
     if (!q.trim()) return true;
     const hay = `${link.influencer_name} ${link.influencer_slug} ${link.platform} ${link.campaign} ${link.destination}`.toLowerCase();
     return hay.includes(q.toLowerCase());
@@ -346,24 +403,41 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
 
   const filteredInfluencers = influencerStats.filter((row) => {
     if (influencerPlatform !== "all" && row.platform !== influencerPlatform) return false;
+    if (influencerNomsFilter === "yes" && row.count === 0) return false;
+    if (influencerNomsFilter === "no" && row.count > 0) return false;
+    if (influencerDate && (!row.latest || istDayKey(row.latest) !== istDayKey(influencerDate))) return false;
     if (!influencerQ.trim()) return true;
     const hay = `${row.name} ${row.slug} ${row.platform}`.toLowerCase();
     return hay.includes(influencerQ.toLowerCase());
   });
 
-  const linksFiltersActive = platformFilter !== "all" || campaignFilter !== "all" || destFilter !== "all" || q.trim().length > 0;
-  const influencerFiltersActive = influencerPlatform !== "all" || influencerQ.trim().length > 0;
+  const linksFiltersActive =
+    platformFilter !== "all" ||
+    campaignFilter !== "all" ||
+    destFilter !== "all" ||
+    linkNomsFilter !== "all" ||
+    Boolean(linkCreatedDate) ||
+    q.trim().length > 0;
+  const influencerFiltersActive =
+    influencerPlatform !== "all" ||
+    influencerNomsFilter !== "all" ||
+    Boolean(influencerDate) ||
+    influencerQ.trim().length > 0;
 
   const clearLinkFilters = () => {
     setQ("");
     setPlatformFilter("all");
     setCampaignFilter("all");
     setDestFilter("all");
+    setLinkCreatedDate(undefined);
+    setLinkNomsFilter("all");
   };
 
   const clearInfluencerFilters = () => {
     setInfluencerQ("");
     setInfluencerPlatform("all");
+    setInfluencerDate(undefined);
+    setInfluencerNomsFilter("all");
   };
 
   const latestNomAt = (noms: any[]) =>
@@ -392,6 +466,71 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
     } catch {
       toast({ title: "Copy failed", description: "Could not access the clipboard.", variant: "destructive" });
     }
+  };
+
+  const copyTable = async (headers: string[], rows: (string | number)[][], noun: string) => {
+    if (rows.length === 0) {
+      toast({ title: "Nothing to copy", description: `No ${noun} match the current filters.`, variant: "destructive" });
+      return;
+    }
+    const tsv = [headers, ...rows].map((row) => row.map(flattenCell).join("\t")).join("\n");
+    try {
+      await navigator.clipboard.writeText(tsv);
+      toast({ title: `Copied ${rows.length} ${noun}` });
+    } catch {
+      toast({ title: "Copy failed", description: "Could not access the clipboard.", variant: "destructive" });
+    }
+  };
+
+  const copyAllLinks = () => {
+    const rows = filteredLinks.map((link) => {
+      const noms = nomsForLink(link);
+      const lastActivity = lastActivityOf(link, noms);
+      return [
+        link.influencer_name,
+        platformLabel(link.platform),
+        link.campaign,
+        destLabel(link.destination),
+        buildPromoUrl(link),
+        link.created_at ? new Date(link.created_at).toLocaleDateString("en-IN") : "",
+        link.views || 0,
+        noms.length,
+        lastActivity ? formatDateIn(lastActivity) : "",
+      ];
+    });
+    void copyTable(
+      ["Influencer", "Platform", "Campaign", "Destination", "URL", "Created", "Views", "Nominations", "Last activity"],
+      rows,
+      "link"
+    );
+  };
+
+  const copyAllInfluencers = () => {
+    const rows = filteredInfluencers.map((r) => [
+      r.name,
+      platformLabel(r.platform),
+      r.count,
+      r.latest ? formatDateIn(r.latest) : "",
+    ]);
+    void copyTable(["Influencer", "Platform", "Nominations", "Latest nomination"], rows, "influencer");
+  };
+
+  const viewAllLinks = () => {
+    const noms = uniqueNoms(filteredLinks.flatMap((link) => nomsForLink(link)));
+    if (noms.length === 0) {
+      toast({ title: "Nothing to view", description: "No nominations match the current filters.", variant: "destructive" });
+      return;
+    }
+    onView(noms, "Tracked links");
+  };
+
+  const viewAllInfluencers = () => {
+    const noms = uniqueNoms(filteredInfluencers.flatMap((row) => row.noms));
+    if (noms.length === 0) {
+      toast({ title: "Nothing to view", description: "No nominations match the current filters.", variant: "destructive" });
+      return;
+    }
+    onView(noms, "Influencers");
   };
 
   const handleGenerate = async (e: FormEvent) => {
@@ -704,11 +843,19 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
             <h3 className="font-heading font-bold text-primary-foreground">
               Tracked links <span className="text-primary-foreground/40 font-normal text-sm">({filteredLinks.length})</span>
             </h3>
-            {linksFiltersActive && (
-              <button type="button" onClick={clearLinkFilters} className="text-[11px] font-semibold text-secondary hover:text-secondary/80 self-start">
-                Clear filters
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {linksFiltersActive && (
+                <button type="button" onClick={clearLinkFilters} className="text-[11px] font-semibold text-secondary hover:text-secondary/80">
+                  Clear filters
+                </button>
+              )}
+              <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={viewAllLinks}>
+                <Eye className="w-3.5 h-3.5" /> View all
+              </Button>
+              <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={copyAllLinks}>
+                <Copy className="w-3.5 h-3.5" /> Copy all
+              </Button>
+            </div>
           </div>
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary-foreground/30" />
@@ -719,7 +866,7 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
               className="pl-9 bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9"
             />
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
             <Select value={platformFilter} onValueChange={setPlatformFilter}>
               <SelectTrigger className="bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9">
                 <SelectValue placeholder="All platforms" />
@@ -743,7 +890,7 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
               </SelectContent>
             </Select>
             <Select value={destFilter} onValueChange={setDestFilter}>
-              <SelectTrigger className="col-span-2 lg:col-span-1 bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9">
+              <SelectTrigger className="bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9">
                 <SelectValue placeholder="All destinations" />
               </SelectTrigger>
               <SelectContent>
@@ -753,6 +900,17 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={linkNomsFilter} onValueChange={setLinkNomsFilter}>
+              <SelectTrigger className="bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9">
+                <SelectValue placeholder="All nominations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All nominations</SelectItem>
+                <SelectItem value="yes">Has nominations</SelectItem>
+                <SelectItem value="no">No nominations</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateFilterButton value={linkCreatedDate} onChange={setLinkCreatedDate} emptyLabel="All created dates" />
           </div>
         </div>
 
@@ -889,6 +1047,12 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
                   Clear filters
                 </button>
               )}
+              <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={viewAllInfluencers}>
+                <Eye className="w-3.5 h-3.5" /> View all
+              </Button>
+              <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={copyAllInfluencers}>
+                <Copy className="w-3.5 h-3.5" /> Copy all
+              </Button>
               <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={exportInfluencersCSV}>
                 <Download className="w-3.5 h-3.5" /> Export CSV
               </Button>
@@ -915,6 +1079,17 @@ const CampaignsPanel = ({ nominations, onView }: Props) => {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={influencerNomsFilter} onValueChange={setInfluencerNomsFilter}>
+              <SelectTrigger className="w-full sm:w-44 bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9">
+                <SelectValue placeholder="All nominations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All nominations</SelectItem>
+                <SelectItem value="yes">Has nominations</SelectItem>
+                <SelectItem value="no">No nominations</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateFilterButton value={influencerDate} onChange={setInfluencerDate} emptyLabel="All latest dates" />
           </div>
         </div>
         {filteredInfluencers.length === 0 ? (

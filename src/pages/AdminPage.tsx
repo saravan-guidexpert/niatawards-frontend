@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
@@ -361,6 +361,9 @@ const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: 
   </div>
 );
 
+const uniqueSorted = (values: (string | undefined | null)[]) =>
+  Array.from(new Set(values.map((v) => String(v || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
 const ViewNominationsModal = ({
   nominations, title, onClose, onPhotoClick,
 }: {
@@ -369,7 +372,82 @@ const ViewNominationsModal = ({
   onClose: () => void;
   onPhotoClick?: (n: any) => void;
 }) => {
+  const { toast } = useToast();
   const list = Array.isArray(nominations) ? nominations.filter(Boolean) : [];
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [classFilter, setClassFilter] = useState("all");
+  const [subjectFilter, setSubjectFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [layout, setLayout] = useState<"table" | "cards">("table");
+  const [detail, setDetail] = useState<any | null>(null);
+
+  const types = uniqueSorted(list.map((n) => n.type));
+  const statuses = uniqueSorted(list.map((n) => n.status));
+  const classes = uniqueSorted(list.map((n) => classOrExp(n)));
+  const subjects = uniqueSorted(list.map((n) => n.subject));
+  const categories = uniqueSorted(list.map((n) => n.award_category));
+  const sources = uniqueSorted(list.map((n) => utmSourceKey(n)));
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return list.filter((n) => {
+      if (q) {
+        const hay = [
+          displayName(n), n.student_name, n.school_name, n.phone, n.nominator_name,
+          n.nominator_phone, n.subject, n.special_thing, n.impact_story, n.utm_campaign,
+        ].some((v) => String(v || "").toLowerCase().includes(q));
+        if (!hay) return false;
+      }
+      if (typeFilter !== "all" && n.type !== typeFilter) return false;
+      if (statusFilter !== "all" && n.status !== statusFilter) return false;
+      if (classFilter !== "all" && classOrExp(n) !== classFilter) return false;
+      if (subjectFilter !== "all" && String(n.subject || "").trim() !== subjectFilter) return false;
+      if (categoryFilter !== "all" && n.award_category !== categoryFilter) return false;
+      if (sourceFilter !== "all" && utmSourceKey(n) !== sourceFilter) return false;
+      return true;
+    });
+  }, [list, search, typeFilter, statusFilter, classFilter, subjectFilter, categoryFilter, sourceFilter]);
+
+  const filtersActive =
+    search.trim().length > 0 ||
+    typeFilter !== "all" ||
+    statusFilter !== "all" ||
+    classFilter !== "all" ||
+    subjectFilter !== "all" ||
+    categoryFilter !== "all" ||
+    sourceFilter !== "all";
+
+  const clearFilters = () => {
+    setSearch("");
+    setTypeFilter("all");
+    setStatusFilter("all");
+    setClassFilter("all");
+    setSubjectFilter("all");
+    setCategoryFilter("all");
+    setSourceFilter("all");
+  };
+
+  const copyAll = async () => {
+    if (filtered.length === 0) {
+      toast({ title: "Nothing to copy", description: "No nominations match the current filters.", variant: "destructive" });
+      return;
+    }
+    const tsv = [COPY_HEADERS, ...filtered.map(nominationRow)]
+      .map((row) => row.map(flattenCell).join("\t"))
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(tsv);
+      toast({ title: `Copied ${filtered.length} nomination${filtered.length !== 1 ? "s" : ""}` });
+    } catch {
+      toast({ title: "Copy failed", description: "Could not access the clipboard.", variant: "destructive" });
+    }
+  };
+
+  const selectClass = "bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9";
+
   return (
   <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
     <motion.div
@@ -377,24 +455,164 @@ const ViewNominationsModal = ({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       onClick={(e) => e.stopPropagation()}
-      className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90dvh] overflow-hidden flex flex-col text-white"
+      className="bg-[#141414] border border-white/10 rounded-2xl w-full max-w-[95vw] xl:max-w-7xl max-h-[90dvh] overflow-hidden flex flex-col text-white"
     >
-      <div className="flex items-center justify-between p-3 sm:p-5 border-b border-white/10">
-        <div>
-          <h2 className="font-heading text-base sm:text-lg font-bold text-white">{title || "Nominations"}</h2>
-          <p className="text-xs text-white/40 mt-0.5">{list.length} nomination{list.length !== 1 ? "s" : ""}</p>
+      <div className="flex flex-col gap-3 p-3 sm:p-5 border-b border-white/10">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="font-heading text-base sm:text-lg font-bold text-white truncate">{title || "Nominations"}</h2>
+            <p className="text-xs text-white/40 mt-0.5">
+              {filtered.length} of {list.length} nomination{list.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
+            <Button
+              variant="hero-outline"
+              size="sm"
+              className="gap-1.5 text-xs h-9"
+              onClick={() => { setDetail(null); setLayout((cur) => (cur === "table" ? "cards" : "table")); }}
+            >
+              <Eye className="w-3.5 h-3.5" /> {layout === "table" ? "View all" : "Table"}
+            </Button>
+            <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={() => void copyAll()}>
+              <Copy className="w-3.5 h-3.5" /> Copy all
+            </Button>
+            <button type="button" onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-        <button type="button" onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
-          <X className="w-5 h-5" />
-        </button>
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+          <Input
+            placeholder="Search teacher, student, school, phone, subject…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9"
+          />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className={selectClass}><SelectValue placeholder="All types" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              {types.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className={selectClass}><SelectValue placeholder="All status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All status</SelectItem>
+              {statuses.map((s) => (
+                <SelectItem key={s} value={s}>{s === "draft" ? "Incomplete" : s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={classFilter} onValueChange={setClassFilter}>
+            <SelectTrigger className={selectClass}><SelectValue placeholder="All classes" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All classes</SelectItem>
+              {classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+            <SelectTrigger className={selectClass}><SelectValue placeholder="All subjects" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All subjects</SelectItem>
+              {subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className={selectClass}><SelectValue placeholder="All categories" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={sourceFilter} onValueChange={setSourceFilter}>
+            <SelectTrigger className={selectClass}><SelectValue placeholder="All sources" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sources</SelectItem>
+              {sources.map((s) => <SelectItem key={s} value={s}>{prettyUtm(s)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {filtersActive && (
+            <button type="button" onClick={clearFilters} className="text-[11px] font-semibold text-secondary hover:text-secondary/80 self-center justify-self-start">
+              Clear filters
+            </button>
+          )}
+        </div>
       </div>
-      <div className="overflow-y-auto p-3 sm:p-5 space-y-4 pb-6 safe-bottom">
-        {list.length === 0 ? (
-          <p className="text-sm text-white/50 py-10 text-center">No nominations attributed to this influencer yet.</p>
+      <div className="overflow-auto flex-1 pb-6 safe-bottom">
+        {detail ? (
+          <div className="p-3 sm:p-5 space-y-3">
+            <button type="button" onClick={() => setDetail(null)} className="text-[11px] font-semibold text-secondary hover:text-secondary/80">
+              ← Back to table
+            </button>
+            <NominationDetailCard n={detail} onPhotoClick={onPhotoClick} />
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-white/50 py-10 text-center px-4">
+            {list.length === 0 ? "No nominations attributed to this influencer yet." : "No nominations match the current filters."}
+          </p>
+        ) : layout === "cards" ? (
+          <div className="p-3 sm:p-5 space-y-4">
+            {filtered.map((n, i) => (
+              <NominationDetailCard key={n.id || n._id || i} n={n} onPhotoClick={onPhotoClick} />
+            ))}
+          </div>
         ) : (
-          list.map((n, i) => (
-            <NominationDetailCard key={n.id || n._id || i} n={n} onPhotoClick={onPhotoClick} />
-          ))
+          <table className="w-full min-w-[980px]">
+            <thead className="sticky top-0 z-10 bg-[#141414]">
+              <tr className="border-b border-white/10">
+                {["Teacher", "Student", "School", "Class", "Subject", "Status", "Source", "Date", ""].map((h) => (
+                  <th key={h || "action"} className="text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider px-3 py-3">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((n, i) => (
+                <tr key={n.id || n._id || i} className="border-b border-white/5 hover:bg-white/[0.04]">
+                  <td className="px-3 py-2.5 text-sm font-medium text-white whitespace-nowrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {n.photo_url ? (
+                        <button type="button" onClick={() => onPhotoClick?.(n)} className="flex-shrink-0">
+                          <img
+                            src={cloudinaryDisplayUrl(n.photo_url, { width: 64 })}
+                            alt=""
+                            width={32}
+                            height={32}
+                            className="w-8 h-8 rounded-lg object-cover border border-white/10"
+                          />
+                        </button>
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0">
+                          <ImageOff className="w-3.5 h-3.5 text-white/25" />
+                        </div>
+                      )}
+                      <span className="truncate max-w-[160px]">{displayName(n)}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-white/80 whitespace-nowrap">{n.student_name || "—"}</td>
+                  <td className="px-3 py-2.5 text-xs text-white/70 max-w-[160px] truncate">{n.school_name || "—"}</td>
+                  <td className="px-3 py-2.5 text-[11px] text-white/60 max-w-[140px] truncate">{classOrExp(n) || "—"}</td>
+                  <td className="px-3 py-2.5 text-xs text-white/70 whitespace-nowrap">{n.subject || "—"}</td>
+                  <td className="px-3 py-2.5"><StatusBadge status={n.status} /></td>
+                  <td className="px-3 py-2.5"><UtmChip n={n} compact /></td>
+                  <td className="px-3 py-2.5 text-[11px] text-white/45 whitespace-nowrap">{n.created_at ? new Date(n.created_at).toLocaleString("en-IN") : "—"}</td>
+                  <td className="px-3 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setDetail(n)}
+                      className="text-[11px] font-semibold text-secondary hover:text-secondary/80"
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </motion.div>
