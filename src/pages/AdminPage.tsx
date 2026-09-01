@@ -7,7 +7,7 @@ import {
   CheckCircle2, XCircle, Eye, BarChart3, ArrowLeft, Star,
   Loader2, RefreshCw, LogOut, Pencil, X, Save,
   Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2, Target, Shield,
-  Hourglass, MessageCircle, Trash2
+  Hourglass, MessageCircle, Trash2, GraduationCap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import CampaignsPanel from "@/components/admin/CampaignsPanel";
 import DigitalMarketingPanel from "@/components/admin/DigitalMarketingPanel";
 import AccessManagementPanel from "@/components/admin/AccessManagementPanel";
 import FunnelAnalytics from "@/components/admin/FunnelAnalytics";
+import UniqueTeachersPanel from "@/components/admin/UniqueTeachersPanel";
 import WhatsAppOpsPanel from "@/components/admin/WhatsAppOpsPanel";
 import {
   allowedAdminTabs,
@@ -37,6 +38,13 @@ import {
   setAdminSession,
   type PanelPermission,
 } from "@/lib/adminSession";
+
+// The teachers view is another cut of the nominations data, so it rides on the
+// nominations permission rather than introducing a new one.
+type AdminTab = PanelPermission | "access" | "teachers";
+
+const isTabAllowed = (tab: AdminTab, allowed: Array<PanelPermission | "access">) =>
+  tab === "teachers" ? allowed.includes("nominations") : allowed.includes(tab);
 
 const awardCategories = [
   "Student Transformation Award",
@@ -865,7 +873,7 @@ const AdminPage = () => {
   const [nominations, setNominations] = useState<any[]>([]);
   const [adminUser, setAdminUser] = useState(getAdminUser());
   const tabs = allowedAdminTabs(adminUser);
-  const [activeTab, setActiveTab] = useState<PanelPermission | "access">(firstAllowedTab(adminUser));
+  const [activeTab, setActiveTab] = useState<AdminTab>(firstAllowedTab(adminUser));
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -887,7 +895,7 @@ const AdminPage = () => {
     }
     const current = getAdminUser();
     const allowed = allowedAdminTabs(current);
-    if (!allowed.includes(activeTab)) {
+    if (!isTabAllowed(activeTab, allowed)) {
       setActiveTab(firstAllowedTab(current));
     }
     const session = getAdminSession();
@@ -1089,7 +1097,7 @@ const AdminPage = () => {
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
               <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
             </Button>
-            {activeTab !== "access" && activeTab !== "whatsapp" && (
+            {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && (
               <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
                 <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span>
               </Button>
@@ -1106,12 +1114,13 @@ const AdminPage = () => {
         <div className="container px-3 sm:px-4 flex overflow-x-auto">
           {[
             { id: "nominations" as const, label: "Nominations", icon: Users },
+            { id: "teachers" as const, label: "Unique Teachers", icon: GraduationCap },
             { id: "campaigns" as const, label: "Influencer Tracking", icon: Megaphone },
             { id: "digital" as const, label: "Digital Marketing", icon: Target },
             { id: "whatsapp" as const, label: "WhatsApp", icon: MessageCircle },
             { id: "access" as const, label: "Access", icon: Shield },
-          ].filter((tab) => tabs.includes(tab.id)).map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
+          ].filter((tab) => isTabAllowed(tab.id, tabs)).map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
                 activeTab === tab.id
                   ? "border-secondary text-secondary"
@@ -1131,7 +1140,7 @@ const AdminPage = () => {
 
       {/* Content */}
       <div className={`py-6 sm:py-8 px-3 sm:px-4 ${
-        activeTab === "nominations"
+        activeTab === "nominations" || activeTab === "teachers"
           ? "mx-auto w-full max-w-7xl xl:max-w-[1600px] 2xl:max-w-[1840px] 2xl:px-8"
           : "container"
       }`}>
@@ -1526,6 +1535,12 @@ const AdminPage = () => {
               )}
             </motion.div>
           </>
+        ) : activeTab === "teachers" ? (
+          <UniqueTeachersPanel nominations={submitted} onView={(noms, title) => {
+            const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
+            setViewingTitle(title);
+            setViewingNoms(list);
+          }} />
         ) : activeTab === "campaigns" ? (
           <CampaignsPanel nominations={submitted} onView={(noms, title) => {
             const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
