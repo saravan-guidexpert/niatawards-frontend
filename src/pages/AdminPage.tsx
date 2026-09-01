@@ -7,7 +7,7 @@ import {
   CheckCircle2, XCircle, Eye, BarChart3, ArrowLeft, Star,
   Loader2, RefreshCw, LogOut, Pencil, X, Save,
   Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2, Target, Shield,
-  Hourglass, MessageCircle, Trash2, GraduationCap
+  Hourglass, MessageCircle, Trash2, GraduationCap, Clapperboard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import DigitalMarketingPanel from "@/components/admin/DigitalMarketingPanel";
 import AccessManagementPanel from "@/components/admin/AccessManagementPanel";
 import FunnelAnalytics from "@/components/admin/FunnelAnalytics";
 import UniqueTeachersPanel from "@/components/admin/UniqueTeachersPanel";
+import TeacherVideoReviewPanel from "@/components/admin/TeacherVideoReviewPanel";
 import WhatsAppOpsPanel from "@/components/admin/WhatsAppOpsPanel";
 import {
   allowedAdminTabs,
@@ -41,10 +42,10 @@ import {
 
 // The teachers view is another cut of the nominations data, so it rides on the
 // nominations permission rather than introducing a new one.
-type AdminTab = PanelPermission | "access" | "teachers";
+type AdminTab = PanelPermission | "access" | "teachers" | "videos";
 
 const isTabAllowed = (tab: AdminTab, allowed: Array<PanelPermission | "access">) =>
-  tab === "teachers" ? allowed.includes("nominations") : allowed.includes(tab);
+  tab === "teachers" || tab === "videos" ? allowed.includes("nominations") : allowed.includes(tab);
 
 const awardCategories = [
   "Student Transformation Award",
@@ -1097,7 +1098,7 @@ const AdminPage = () => {
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
               <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
             </Button>
-            {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && (
+            {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && activeTab !== "videos" && (
               <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
                 <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span>
               </Button>
@@ -1115,6 +1116,7 @@ const AdminPage = () => {
           {[
             { id: "nominations" as const, label: "Nominations", icon: Users },
             { id: "teachers" as const, label: "Unique Teachers", icon: GraduationCap },
+            { id: "videos" as const, label: "Teacher Video Review", icon: Clapperboard },
             { id: "campaigns" as const, label: "Influencer Tracking", icon: Megaphone },
             { id: "digital" as const, label: "Digital Marketing", icon: Target },
             { id: "whatsapp" as const, label: "WhatsApp", icon: MessageCircle },
@@ -1140,11 +1142,11 @@ const AdminPage = () => {
 
       {/* Content */}
       <div className={`py-6 sm:py-8 px-3 sm:px-4 ${
-        activeTab === "nominations" || activeTab === "teachers"
+        activeTab === "nominations" || activeTab === "teachers" || activeTab === "videos"
           ? "mx-auto w-full max-w-7xl xl:max-w-[1600px] 2xl:max-w-[1840px] 2xl:px-8"
           : "container"
       }`}>
-        {loading && activeTab !== "access" && activeTab !== "whatsapp" ? (
+        {loading && activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "videos" ? (
           <div className="flex items-center justify-center py-24">
             <Loader2 className="w-8 h-8 text-secondary animate-spin" />
             <span className="ml-3 text-primary-foreground/60">Loading...</span>
@@ -1541,6 +1543,8 @@ const AdminPage = () => {
             setViewingTitle(title);
             setViewingNoms(list);
           }} />
+        ) : activeTab === "videos" ? (
+          <TeacherVideoReviewPanel />
         ) : activeTab === "campaigns" ? (
           <CampaignsPanel nominations={submitted} onView={(noms, title) => {
             const list = Array.isArray(noms) ? noms.filter(Boolean) : [];

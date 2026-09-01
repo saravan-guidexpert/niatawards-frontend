@@ -400,3 +400,46 @@ export const adminWhatsAppRunRetries = () =>
     sent: number;
     elapsedMs: number;
   }>("/api/admin/whatsapp-ops/actions/run-retries", { method: "POST" });
+
+export type VideoReviewItem = {
+  nomination_id: string;
+  teacher_name: string | null;
+  teacher_phone: string | null;
+  teacher_photo_url: string | null;
+  teacher_photo_provided: boolean;
+  student_name: string | null;
+  nominator_name: string | null;
+  nominator_phone: string | null;
+  nomination_type: string;
+  student_class: string | null;
+  created_at: string | null;
+  eligible: boolean;
+  generation_status: string;
+  review_status: string;
+  video_url: string | null;
+  generated_at: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  ready_for_message: boolean;
+  regenerate_available: boolean;
+};
+
+export type VideoReviewCounts = {
+  total: number;
+  with_photo: number;
+  without_photo: number;
+  ready_for_review: number;
+  approved: number;
+  rejected: number;
+  failed: number;
+};
+
+export const adminGetVideoReviews = () =>
+  adminRequest<{ items: VideoReviewItem[]; counts: VideoReviewCounts }>("/api/admin/video-reviews");
+
+export const adminReviewVideo = (nominationId: string, action: "approve" | "reject", reason?: string) =>
+  adminRequest<VideoReviewItem>(`/api/admin/video-reviews/${encodeURIComponent(nominationId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(action === "reject" ? { action, reason } : { action }),
+  });
