@@ -138,42 +138,98 @@ const stageLabel = (n: any) => {
   return STAGE_LABELS[n.form_step] || "Started";
 };
 
-const COPY_HEADERS = [
-  "Type", "Teacher/Applicant", "Student", "School", "Category", "Class", "Subject",
-  "Teacher Phone", "User Name", "User Phone", "Status", "Stage", "Date", "Photo URL",
-  "Special thing", "Impact story",
-  "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content",
+const formatDateTimeIn = (value: string) =>
+  new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+
+const yesNo = (value: unknown) => (value === true ? "Yes" : value === false ? "No" : "");
+
+type CopyColumn = { header: string; key?: string; value?: (n: any) => unknown };
+
+const BASE_COPY_COLUMNS: CopyColumn[] = [
+  { header: "ID", key: "id" },
+  { header: "Type", key: "type" },
+  { header: "Teacher/Applicant", value: displayName },
+  { header: "Teacher Name", key: "teacher_name" },
+  { header: "Applicant Full Name", key: "full_name" },
+  { header: "Student", key: "student_name" },
+  { header: "School", key: "school_name" },
+  { header: "Board", key: "board" },
+  { header: "Category", key: "award_category" },
+  { header: "Class", value: classOrExp },
+  { header: "Student Class", key: "student_class" },
+  { header: "Class Group", key: "class_group" },
+  { header: "Experience (yrs)", key: "experience" },
+  { header: "Subject", key: "subject" },
+  { header: "Teacher Phone", key: "phone" },
+  { header: "Teacher Social", key: "teacher_social" },
+  { header: "User Name", key: "nominator_name" },
+  { header: "User Phone", key: "nominator_phone" },
+  { header: "Phone Verified", key: "phone_verified", value: (n) => yesNo(n.phone_verified) },
+  { header: "Status", key: "status" },
+  { header: "Stage", value: stageLabel },
+  { header: "Form Step", key: "form_step" },
+  { header: "WhatsApp Status", key: "whatsapp_status" },
+  { header: "WhatsApp Attempt", key: "whatsapp_attempt" },
+  { header: "WhatsApp Error", key: "whatsapp_error" },
+  { header: "Date", key: "created_at", value: (n) => (n.created_at ? formatDateTimeIn(n.created_at) : "") },
+  { header: "Photo URL", key: "photo_url" },
+  { header: "Special thing", key: "special_thing" },
+  { header: "Impact story", key: "impact_story" },
+  { header: "Care Rating", key: "care_rating" },
+  { header: "Clarity Rating", key: "clarity_rating" },
+  { header: "Motivation Rating", key: "motivation_rating" },
+  { header: "Support Rating", key: "support_rating" },
+  { header: "UTM Source", key: "utm_source" },
+  { header: "UTM Medium", key: "utm_medium" },
+  { header: "UTM Campaign", key: "utm_campaign" },
+  { header: "UTM Term", key: "utm_term" },
+  { header: "UTM Content", key: "utm_content" },
 ];
 
-const nominationRow = (n: any) => [
-  n.type || "",
-  displayName(n),
-  n.student_name || "",
-  n.school_name || "",
-  n.award_category || "",
-  classOrExp(n),
-  n.subject || "",
-  n.phone || "",
-  n.nominator_name || "",
-  n.nominator_phone || "",
-  n.status || "",
-  stageLabel(n),
-  n.created_at ? formatDateIn(n.created_at) : "",
-  n.photo_url || "",
-  n.special_thing || "",
-  n.impact_story || "",
-  n.utm_source || "",
-  n.utm_medium || "",
-  n.utm_campaign || "",
-  n.utm_term || "",
-  n.utm_content || "",
-];
+const IGNORED_COPY_KEYS = new Set(["_id", "__v", "draft_token"]);
+
+const prettyHeader = (key: string) =>
+  key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+/**
+ * The fixed columns plus any field the API has started returning since, so a new
+ * backend field shows up in exports without anyone remembering to add it here.
+ */
+export const copyColumns = (rows: any[]): CopyColumn[] => {
+  const known = new Set(BASE_COPY_COLUMNS.map((c) => c.key).filter(Boolean) as string[]);
+  const extras: CopyColumn[] = [];
+  for (const row of rows) {
+    for (const key of Object.keys(row || {})) {
+      if (known.has(key) || IGNORED_COPY_KEYS.has(key)) continue;
+      known.add(key);
+      extras.push({ header: prettyHeader(key), key });
+    }
+  }
+  return [...BASE_COPY_COLUMNS, ...extras];
+};
+
+const cellValue = (col: CopyColumn, n: any) => {
+  const raw = col.value ? col.value(n) : col.key ? n?.[col.key] : "";
+  if (raw === null || raw === undefined) return "";
+  if (typeof raw === "object") return JSON.stringify(raw);
+  return raw;
+};
+
+export const nominationSheet = (rows: any[]) => {
+  const cols = copyColumns(rows);
+  return [cols.map((c) => c.header), ...rows.map((n) => cols.map((c) => cellValue(c, n)))];
+};
 
 const flattenCell = (value: unknown) => String(value ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
 
-const nominationsToTsv = (rows: any[]) =>
-  [COPY_HEADERS, ...rows.map(nominationRow)]
+export const nominationsToTsv = (rows: any[]) =>
+  nominationSheet(rows)
     .map((row) => row.map(flattenCell).join("\t"))
+    .join("\n");
+
+const nominationsToCsv = (rows: any[]) =>
+  nominationSheet(rows)
+    .map((row) => row.map((v) => `"${flattenCell(v).replace(/"/g, '""')}"`).join(","))
     .join("\n");
 
 const copyViaTextarea = (text: string) => {
@@ -477,6 +533,7 @@ const ViewNominationsModal = ({
   const [layout, setLayout] = useState<"table" | "cards">("table");
   const [detail, setDetail] = useState<any | null>(null);
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState<string>(String(MODAL_PAGE_SIZE));
   const [copying, setCopying] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -516,15 +573,16 @@ const ViewNominationsModal = ({
     categoryFilter !== "all" ||
     sourceFilter !== "all";
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / MODAL_PAGE_SIZE));
+  const rowsPerPage = pageSize === "all" ? Math.max(1, filtered.length) : Number(pageSize);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const safePage = Math.min(page, totalPages - 1);
-  const pageRows = filtered.slice(safePage * MODAL_PAGE_SIZE, (safePage + 1) * MODAL_PAGE_SIZE);
-  const rangeStart = filtered.length === 0 ? 0 : safePage * MODAL_PAGE_SIZE + 1;
-  const rangeEnd = Math.min(filtered.length, (safePage + 1) * MODAL_PAGE_SIZE);
+  const pageRows = filtered.slice(safePage * rowsPerPage, (safePage + 1) * rowsPerPage);
+  const rangeStart = filtered.length === 0 ? 0 : safePage * rowsPerPage + 1;
+  const rangeEnd = Math.min(filtered.length, (safePage + 1) * rowsPerPage);
 
   useEffect(() => {
     setPage(0);
-  }, [search, typeFilter, statusFilter, classFilter, subjectFilter, categoryFilter, sourceFilter]);
+  }, [search, typeFilter, statusFilter, classFilter, subjectFilter, categoryFilter, sourceFilter, pageSize]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
@@ -570,24 +628,40 @@ const ViewNominationsModal = ({
   const filterLabel = (value: string, allLabel: string) => (value === "all" ? allLabel : value);
 
   const pager = filtered.length > MODAL_PAGE_SIZE && !detail ? (
-    <div className="flex items-center justify-between gap-2 px-3 sm:px-5 py-2 border-t border-white/10 text-xs text-white/50">
-      <button
-        type="button"
-        disabled={safePage === 0}
-        onClick={() => setPage((p) => Math.max(0, p - 1))}
-        className="font-semibold text-secondary hover:text-secondary/80 disabled:text-white/25 disabled:pointer-events-none"
-      >
-        Previous
-      </button>
-      <span>{rangeStart}–{rangeEnd} of {filtered.length}</span>
-      <button
-        type="button"
-        disabled={safePage >= totalPages - 1}
-        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-        className="font-semibold text-secondary hover:text-secondary/80 disabled:text-white/25 disabled:pointer-events-none"
-      >
-        Next
-      </button>
+    <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-5 py-2 border-t border-white/10 text-xs text-white/50">
+      <div className="flex items-center gap-2">
+        <span className="hidden sm:inline">Rows</span>
+        <Select value={pageSize} onValueChange={setPageSize}>
+          <SelectTrigger className="h-8 w-[92px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {["50", "100", "250", "500"].map((size) => (
+              <SelectItem key={size} value={size}>{size}</SelectItem>
+            ))}
+            <SelectItem value="all">All</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <span>{rangeStart}–{rangeEnd} of {filtered.length.toLocaleString("en-IN")}</span>
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          disabled={safePage === 0}
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
+          className="font-semibold text-secondary hover:text-secondary/80 disabled:text-white/25 disabled:pointer-events-none"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          disabled={safePage >= totalPages - 1}
+          onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+          className="font-semibold text-secondary hover:text-secondary/80 disabled:text-white/25 disabled:pointer-events-none"
+        >
+          Next
+        </button>
+      </div>
     </div>
   ) : null;
 
@@ -632,7 +706,7 @@ const ViewNominationsModal = ({
               onClick={() => void copyAll()}
             >
               {copying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
-              {copying ? "Copying…" : "Copy all"}
+              {copying ? "Copying…" : `Copy all (${filtered.length.toLocaleString("en-IN")})`}
             </Button>
             <button type="button" onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
               <X className="w-5 h-5" />
@@ -1035,6 +1109,8 @@ const AdminPage = () => {
   const [typeFilter, setTypeFilter] = useState("All");
   const [sourceFilter, setSourceFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
+  const [tablePage, setTablePage] = useState(0);
+  const [tablePageSize, setTablePageSize] = useState<string>(String(MODAL_PAGE_SIZE));
   const [editingNom, setEditingNom] = useState<any | null>(null);
   const [viewingNoms, setViewingNoms] = useState<any[] | null>(null);
   const [viewingTitle, setViewingTitle] = useState<string | null>(null);
@@ -1135,7 +1211,7 @@ const AdminPage = () => {
 
   const canDeleteNominations = adminUser?.role === "super_admin";
 
-  const filtered = nominations.filter(n => {
+  const filtered = useMemo(() => nominations.filter(n => {
     const q = search.toLowerCase();
     const haystack = [
       n.teacher_name, n.full_name, n.school_name, n.student_name,
@@ -1149,18 +1225,28 @@ const AdminPage = () => {
     const matchSource = sourceFilter === "All" || utmSourceKey(n) === sourceFilter;
     const matchDate = !dateFilter || istDayKey(n.created_at) === istDayKey(dateFilter);
     return matchSearch && matchCategory && matchStatus && matchFunnel && matchType && matchSource && matchDate;
-  });
+  }), [nominations, search, categoryFilter, statusFilter, funnelFilter, typeFilter, sourceFilter, dateFilter]);
+
+  useEffect(() => {
+    setTablePage(0);
+  }, [search, categoryFilter, statusFilter, funnelFilter, typeFilter, sourceFilter, dateFilter, tablePageSize]);
+
+  const rowsPerPage = tablePageSize === "all" ? Math.max(1, filtered.length) : Number(tablePageSize);
+  const tablePageCount = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
+  const safeTablePage = Math.min(tablePage, tablePageCount - 1);
+  const tableRows = useMemo(
+    () => filtered.slice(safeTablePage * rowsPerPage, (safeTablePage + 1) * rowsPerPage),
+    [filtered, safeTablePage, rowsPerPage],
+  );
+  const tableRangeStart = filtered.length === 0 ? 0 : safeTablePage * rowsPerPage + 1;
+  const tableRangeEnd = Math.min(filtered.length, (safeTablePage + 1) * rowsPerPage);
 
   const categories = ["All", ...Array.from(new Set(nominations.map(n => n.award_category).filter(Boolean)))];
   const utmSources = ["All", ...Array.from(new Set(nominations.map(utmSourceKey)))];
 
   const exportCSV = () => {
-    const rows = [
-      COPY_HEADERS,
-      ...filtered.map(nominationRow),
-    ];
-    const csv = rows.map(r => r.map(v => `"${flattenCell(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    // BOM so Excel opens Indian names and other non-ASCII text correctly.
+    const blob = new Blob(["\uFEFF", nominationsToCsv(filtered)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "nominations.csv"; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -1304,13 +1390,12 @@ const AdminPage = () => {
           ? "mx-auto w-full max-w-7xl xl:max-w-[1600px] 2xl:max-w-[1840px] 2xl:px-8"
           : "container"
       }`}>
-        {loading && activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "videos" ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="w-8 h-8 text-secondary animate-spin" />
-            <span className="ml-3 text-primary-foreground/60">Loading...</span>
-          </div>
-        ) : activeTab === "access" ? (
+        {activeTab === "access" ? (
           <AccessManagementPanel />
+        ) : activeTab === "whatsapp" ? (
+          <WhatsAppOpsPanel />
+        ) : activeTab === "videos" ? (
+          <TeacherVideoReviewPanel />
         ) : activeTab === "nominations" ? (
           <>
             <FunnelAnalytics
@@ -1330,6 +1415,13 @@ const AdminPage = () => {
                 setFunnelFilter(stageId);
               }}
             />
+            {loading ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="w-8 h-8 text-secondary animate-spin" />
+                <span className="ml-3 text-primary-foreground/60">Loading nominations…</span>
+              </div>
+            ) : (
+          <>
             {/* Shortlisted → voting banner */}
             {shortlisted === 0 && pending > 0 && (
               <div className="flex items-center gap-3 p-4 rounded-xl mb-5 border border-amber-500/30 bg-amber-500/10">
@@ -1466,10 +1558,10 @@ const AdminPage = () => {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={openViewAll}>
-                        <Eye className="w-3.5 h-3.5" /> View all
+                        <Eye className="w-3.5 h-3.5" /> View all ({filtered.length.toLocaleString("en-IN")})
                       </Button>
                       <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={() => void copyAllFiltered()}>
-                        <Copy className="w-3.5 h-3.5" /> Copy all
+                        <Copy className="w-3.5 h-3.5" /> Copy all ({filtered.length.toLocaleString("en-IN")})
                       </Button>
                     </div>
                   </div>
@@ -1551,7 +1643,7 @@ const AdminPage = () => {
                 </div>
               </div>
               <div className="lg:hidden p-3 space-y-3">
-                {filtered.map((n) => (
+                {tableRows.map((n) => (
                   <div key={n.id} className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/[0.04] p-3 space-y-3">
                     {n.photo_url ? (
                       <button
@@ -1632,8 +1724,8 @@ const AdminPage = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((n, i) => (
-                      <motion.tr key={n.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 12) * 0.02 }}
+                    {tableRows.map((n) => (
+                      <tr key={n.id}
                         className="border-b border-primary-foreground/5 hover:bg-primary-foreground/[0.04] transition-colors">
                         <td className="px-2.5 py-3 align-middle">
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${n.type === "student" ? "bg-primary/20 text-primary-foreground" : "bg-secondary/20 text-secondary"}`}>{n.type}</span>
@@ -1690,7 +1782,7 @@ const AdminPage = () => {
                             onDelete={() => void deleteNomination(n)}
                           />
                         </td>
-                      </motion.tr>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -1700,16 +1792,58 @@ const AdminPage = () => {
                   {nominations.length === 0 ? "No nominations yet. Share the site to get started!" : "No nominations match your filters."}
                 </div>
               )}
+              {filtered.length > MODAL_PAGE_SIZE && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-t border-primary-foreground/10 text-xs text-primary-foreground/50">
+                  <div className="flex items-center gap-2">
+                    <span className="hidden sm:inline">Rows</span>
+                    <Select value={tablePageSize} onValueChange={setTablePageSize}>
+                      <SelectTrigger className="h-8 w-[92px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["50", "100", "250", "500"].map((size) => (
+                          <SelectItem key={size} value={size}>{size}</SelectItem>
+                        ))}
+                        <SelectItem value="all">All</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <span>{tableRangeStart}–{tableRangeEnd} of {filtered.length.toLocaleString("en-IN")}</span>
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      disabled={safeTablePage === 0}
+                      onClick={() => setTablePage((p) => Math.max(0, p - 1))}
+                      className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={safeTablePage >= tablePageCount - 1}
+                      onClick={() => setTablePage((p) => Math.min(tablePageCount - 1, p + 1))}
+                      className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </>
+            )}
+          </>
+        ) : loading ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 className="w-8 h-8 text-secondary animate-spin" />
+            <span className="ml-3 text-primary-foreground/60">Loading nominations…</span>
+          </div>
         ) : activeTab === "teachers" ? (
           <UniqueTeachersPanel nominations={submitted} onView={(noms, title) => {
             const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
             setViewingTitle(title);
             setViewingNoms(list);
           }} />
-        ) : activeTab === "videos" ? (
-          <TeacherVideoReviewPanel />
         ) : activeTab === "campaigns" ? (
           <CampaignsPanel nominations={submitted} onView={(noms, title) => {
             const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
@@ -1722,8 +1856,6 @@ const AdminPage = () => {
             setViewingTitle(title);
             setViewingNoms(list);
           }} />
-        ) : activeTab === "whatsapp" ? (
-          <WhatsAppOpsPanel />
         ) : null}
       </div>
     </div>
