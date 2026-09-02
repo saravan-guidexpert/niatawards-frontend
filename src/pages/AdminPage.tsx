@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
@@ -78,10 +78,12 @@ const STAGE_LABELS: Record<string, string> = {
   submitted: "Submitted",
 };
 
+const FUNNEL_STAGE_ORDER = ["otp_requested", "otp_verified", "form_step1", "submitted"] as const;
+
 const FUNNEL_FILTERS = [
-  { value: "All", label: "All funnel" },
-  { value: "otp_requested", label: "OTP requested" },
-  { value: "otp_not_verified", label: "OTP requested but not verified" },
+  { value: "All", label: "All verified" },
+  { value: "otp_requested", label: "OTP requested (all leads)" },
+  { value: "otp_not_verified", label: "Never verified OTP" },
   { value: "otp_verified", label: "OTP verified" },
   { value: "form_step1", label: "Details filled" },
   { value: "submitted", label: "Submitted" },
@@ -95,12 +97,40 @@ const nominationFunnelStage = (n: any) => {
   return "otp_requested";
 };
 
+/** Abandoned drafts that requested OTP (or only entered a number) but never verified. */
+const neverVerifiedOtp = (n: any) =>
+  isIncomplete(n) &&
+  !n.phone_verified &&
+  n.form_step !== "otp_verified" &&
+  n.form_step !== "details" &&
+  n.form_step !== "submitted";
+
+const reachedFunnelStage = (n: any, stage: string) => {
+  const have = FUNNEL_STAGE_ORDER.indexOf(nominationFunnelStage(n) as (typeof FUNNEL_STAGE_ORDER)[number]);
+  const need = FUNNEL_STAGE_ORDER.indexOf(stage as (typeof FUNNEL_STAGE_ORDER)[number]);
+  return have >= 0 && need >= 0 && have >= need;
+};
+
 const matchesFunnelFilter = (n: any, filter: string) => {
-  if (filter === "All") return true;
-  if (filter === "otp_not_verified") {
-    return isIncomplete(n) && n.form_step === "otp_sent" && !n.phone_verified;
+  // "All verified" matches the funnel's OTP-verified bar: submitted + in-progress
+  // people who actually verified. The extra unverified drafts live in their own filter.
+  if (filter === "All") return !neverVerifiedOtp(n);
+  if (filter === "otp_not_verified") return neverVerifiedOtp(n);
+  return reachedFunnelStage(n, filter);
+};
+
+const phoneKey = (n: any) => String(n.nominator_phone || n.phone || "").replace(/\D/g, "").slice(-10);
+
+const uniquePhoneCount = (rows: any[]) =>
+  new Set(rows.map(phoneKey).filter((p) => p.length === 10)).size;
+
+const copiedNominationsTitle = (rows: any[]) => {
+  const phones = uniquePhoneCount(rows);
+  const noun = `nomination${rows.length !== 1 ? "s" : ""}`;
+  if (phones > 0 && phones !== rows.length) {
+    return `Copied ${rows.length} ${noun} (${phones} unique phones)`;
   }
-  return nominationFunnelStage(n) === filter;
+  return `Copied ${rows.length} ${noun}`;
 };
 
 const stageLabel = (n: any) => {
@@ -109,7 +139,7 @@ const stageLabel = (n: any) => {
 };
 
 const COPY_HEADERS = [
-  "Type", "Teacher/Applicant", "Student", "School", "Category", "Class",
+  "Type", "Teacher/Applicant", "Student", "School", "Category", "Class", "Subject",
   "Teacher Phone", "User Name", "User Phone", "Status", "Stage", "Date", "Photo URL",
   "Special thing", "Impact story",
   "UTM Source", "UTM Medium", "UTM Campaign", "UTM Term", "UTM Content",
@@ -122,6 +152,7 @@ const nominationRow = (n: any) => [
   n.school_name || "",
   n.award_category || "",
   classOrExp(n),
+  n.subject || "",
   n.phone || "",
   n.nominator_name || "",
   n.nominator_phone || "",
@@ -137,6 +168,58 @@ const nominationRow = (n: any) => [
   n.utm_term || "",
   n.utm_content || "",
 ];
+
+const flattenCell = (value: unknown) => String(value ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
+
+const nominationsToTsv = (rows: any[]) =>
+  [COPY_HEADERS, ...rows.map(nominationRow)]
+    .map((row) => row.map(flattenCell).join("\t"))
+    .join("\n");
+
+const copyViaTextarea = (text: string) => {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  ta.setSelectionRange(0, ta.value.length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  document.body.removeChild(ta);
+  return ok;
+};
+
+const downloadTextFile = (filename: string, text: string) => {
+  const blob = new Blob([text], { type: "text/tab-separated-values;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+};
+
+const copyTextWithFallback = async (text: string, filename: string): Promise<"copied" | "downloaded"> => {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return "copied";
+    }
+  } catch {
+    /* fall through to execCommand / download */
+  }
+  if (copyViaTextarea(text)) return "copied";
+  downloadTextFile(filename, text);
+  return "downloaded";
+};
+
+const MODAL_PAGE_SIZE = 50;
 
 const hasUtm = (n: any) =>
   Boolean(n?.utm_source || n?.utm_medium || n?.utm_campaign || n?.utm_term || n?.utm_content);
@@ -193,8 +276,6 @@ const UtmChip = ({ n, className = "", compact = false }: { n: any; className?: s
     </span>
   );
 };
-
-const flattenCell = (value: unknown) => String(value ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
 
 const StatusBadge = ({ status }: { status: string }) => {
   const value = (status || "pending").toString();
@@ -382,7 +463,10 @@ const ViewNominationsModal = ({
   onPhotoClick?: (n: any) => void;
 }) => {
   const { toast } = useToast();
-  const list = Array.isArray(nominations) ? nominations.filter(Boolean) : [];
+  const list = useMemo(
+    () => (Array.isArray(nominations) ? nominations.filter(Boolean) : []),
+    [nominations],
+  );
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -392,13 +476,16 @@ const ViewNominationsModal = ({
   const [sourceFilter, setSourceFilter] = useState("all");
   const [layout, setLayout] = useState<"table" | "cards">("table");
   const [detail, setDetail] = useState<any | null>(null);
+  const [page, setPage] = useState(0);
+  const [copying, setCopying] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const types = uniqueSorted(list.map((n) => n.type));
-  const statuses = uniqueSorted(list.map((n) => n.status));
-  const classes = uniqueSorted(list.map((n) => classOrExp(n)));
-  const subjects = uniqueSorted(list.map((n) => n.subject));
-  const categories = uniqueSorted(list.map((n) => n.award_category));
-  const sources = uniqueSorted(list.map((n) => utmSourceKey(n)));
+  const types = useMemo(() => uniqueSorted(list.map((n) => n.type)), [list]);
+  const statuses = useMemo(() => uniqueSorted(list.map((n) => n.status)), [list]);
+  const classes = useMemo(() => uniqueSorted(list.map((n) => classOrExp(n))), [list]);
+  const subjects = useMemo(() => uniqueSorted(list.map((n) => n.subject)), [list]);
+  const categories = useMemo(() => uniqueSorted(list.map((n) => n.award_category)), [list]);
+  const sources = useMemo(() => uniqueSorted(list.map((n) => utmSourceKey(n))), [list]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -429,6 +516,20 @@ const ViewNominationsModal = ({
     categoryFilter !== "all" ||
     sourceFilter !== "all";
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / MODAL_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = filtered.slice(safePage * MODAL_PAGE_SIZE, (safePage + 1) * MODAL_PAGE_SIZE);
+  const rangeStart = filtered.length === 0 ? 0 : safePage * MODAL_PAGE_SIZE + 1;
+  const rangeEnd = Math.min(filtered.length, (safePage + 1) * MODAL_PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(0);
+  }, [search, typeFilter, statusFilter, classFilter, subjectFilter, categoryFilter, sourceFilter]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [safePage, layout, detail]);
+
   const clearFilters = () => {
     setSearch("");
     setTypeFilter("all");
@@ -440,22 +541,55 @@ const ViewNominationsModal = ({
   };
 
   const copyAll = async () => {
+    if (copying) return;
     if (filtered.length === 0) {
       toast({ title: "Nothing to copy", description: "No nominations match the current filters.", variant: "destructive" });
       return;
     }
-    const tsv = [COPY_HEADERS, ...filtered.map(nominationRow)]
-      .map((row) => row.map(flattenCell).join("\t"))
-      .join("\n");
+    setCopying(true);
     try {
-      await navigator.clipboard.writeText(tsv);
-      toast({ title: `Copied ${filtered.length} nomination${filtered.length !== 1 ? "s" : ""}` });
+      const result = await copyTextWithFallback(nominationsToTsv(filtered), "nominations.tsv");
+      if (result === "copied") {
+        toast({ title: copiedNominationsTitle(filtered) });
+      } else {
+        toast({
+          title: `Downloaded ${filtered.length} nomination${filtered.length !== 1 ? "s" : ""}`,
+          description: uniquePhoneCount(filtered) !== filtered.length
+            ? `${uniquePhoneCount(filtered)} unique phones. Clipboard was too large, so a TSV file was saved instead.`
+            : "Clipboard was too large, so a TSV file was saved instead.",
+        });
+      }
     } catch {
-      toast({ title: "Copy failed", description: "Could not access the clipboard.", variant: "destructive" });
+      toast({ title: "Copy failed", description: "Could not copy or download the list.", variant: "destructive" });
+    } finally {
+      setCopying(false);
     }
   };
 
   const selectClass = "bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9";
+  const filterLabel = (value: string, allLabel: string) => (value === "all" ? allLabel : value);
+
+  const pager = filtered.length > MODAL_PAGE_SIZE && !detail ? (
+    <div className="flex items-center justify-between gap-2 px-3 sm:px-5 py-2 border-t border-white/10 text-xs text-white/50">
+      <button
+        type="button"
+        disabled={safePage === 0}
+        onClick={() => setPage((p) => Math.max(0, p - 1))}
+        className="font-semibold text-secondary hover:text-secondary/80 disabled:text-white/25 disabled:pointer-events-none"
+      >
+        Previous
+      </button>
+      <span>{rangeStart}–{rangeEnd} of {filtered.length}</span>
+      <button
+        type="button"
+        disabled={safePage >= totalPages - 1}
+        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+        className="font-semibold text-secondary hover:text-secondary/80 disabled:text-white/25 disabled:pointer-events-none"
+      >
+        Next
+      </button>
+    </div>
+  ) : null;
 
   return (
   <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.75)" }} onClick={onClose}>
@@ -472,19 +606,33 @@ const ViewNominationsModal = ({
             <h2 className="font-heading text-base sm:text-lg font-bold text-white truncate">{title || "Nominations"}</h2>
             <p className="text-xs text-white/40 mt-0.5">
               {filtered.length} of {list.length} nomination{list.length !== 1 ? "s" : ""}
+              {filtered.length > MODAL_PAGE_SIZE ? ` · showing ${rangeStart}–${rangeEnd}` : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
             <Button
+              type="button"
               variant="hero-outline"
               size="sm"
               className="gap-1.5 text-xs h-9"
-              onClick={() => { setDetail(null); setLayout((cur) => (cur === "table" ? "cards" : "table")); }}
+              onClick={() => {
+                setDetail(null);
+                setPage(0);
+                setLayout((cur) => (cur === "table" ? "cards" : "table"));
+              }}
             >
               <Eye className="w-3.5 h-3.5" /> {layout === "table" ? "View all" : "Table"}
             </Button>
-            <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={() => void copyAll()}>
-              <Copy className="w-3.5 h-3.5" /> Copy all
+            <Button
+              type="button"
+              variant="hero-outline"
+              size="sm"
+              className="gap-1.5 text-xs h-9"
+              disabled={copying || filtered.length === 0}
+              onClick={() => void copyAll()}
+            >
+              {copying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+              {copying ? "Copying…" : "Copy all"}
             </Button>
             <button type="button" onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
               <X className="w-5 h-5" />
@@ -502,14 +650,14 @@ const ViewNominationsModal = ({
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className={selectClass}><SelectValue placeholder="All types" /></SelectTrigger>
+            <SelectTrigger className={selectClass}><span className="truncate">{filterLabel(typeFilter, "All types")}</span></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All types</SelectItem>
               {types.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className={selectClass}><SelectValue placeholder="All status" /></SelectTrigger>
+            <SelectTrigger className={selectClass}><span className="truncate">{statusFilter === "all" ? "All status" : statusFilter === "draft" ? "Incomplete" : statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}</span></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All status</SelectItem>
               {statuses.map((s) => (
@@ -518,28 +666,28 @@ const ViewNominationsModal = ({
             </SelectContent>
           </Select>
           <Select value={classFilter} onValueChange={setClassFilter}>
-            <SelectTrigger className={selectClass}><SelectValue placeholder="All classes" /></SelectTrigger>
+            <SelectTrigger className={selectClass}><span className="truncate">{filterLabel(classFilter, "All classes")}</span></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All classes</SelectItem>
               {classes.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={subjectFilter} onValueChange={setSubjectFilter}>
-            <SelectTrigger className={selectClass}><SelectValue placeholder="All subjects" /></SelectTrigger>
+            <SelectTrigger className={selectClass}><span className="truncate">{filterLabel(subjectFilter, "All subjects")}</span></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All subjects</SelectItem>
               {subjects.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className={selectClass}><SelectValue placeholder="All categories" /></SelectTrigger>
+            <SelectTrigger className={selectClass}><span className="truncate">{filterLabel(categoryFilter, "All categories")}</span></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All categories</SelectItem>
               {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className={selectClass}><SelectValue placeholder="All sources" /></SelectTrigger>
+            <SelectTrigger className={selectClass}><span className="truncate">{sourceFilter === "all" ? "All sources" : prettyUtm(sourceFilter)}</span></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All sources</SelectItem>
               {sources.map((s) => <SelectItem key={s} value={s}>{prettyUtm(s)}</SelectItem>)}
@@ -552,7 +700,7 @@ const ViewNominationsModal = ({
           )}
         </div>
       </div>
-      <div className="overflow-auto flex-1 pb-6 safe-bottom">
+      <div ref={scrollRef} className="overflow-auto flex-1 pb-6 safe-bottom">
         {detail ? (
           <div className="p-3 sm:p-5 space-y-3">
             <button type="button" onClick={() => setDetail(null)} className="text-[11px] font-semibold text-secondary hover:text-secondary/80">
@@ -566,7 +714,7 @@ const ViewNominationsModal = ({
           </p>
         ) : layout === "cards" ? (
           <div className="p-3 sm:p-5 space-y-4">
-            {filtered.map((n, i) => (
+            {pageRows.map((n, i) => (
               <NominationDetailCard key={n.id || n._id || i} n={n} onPhotoClick={onPhotoClick} />
             ))}
           </div>
@@ -580,7 +728,7 @@ const ViewNominationsModal = ({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((n, i) => (
+              {pageRows.map((n, i) => (
                 <tr key={n.id || n._id || i} className="border-b border-white/5 hover:bg-white/[0.04]">
                   <td className="px-3 py-2.5 text-sm font-medium text-white whitespace-nowrap">
                     <div className="flex items-center gap-2 min-w-0">
@@ -592,6 +740,8 @@ const ViewNominationsModal = ({
                             width={32}
                             height={32}
                             className="w-8 h-8 rounded-lg object-cover border border-white/10"
+                            loading="lazy"
+                            decoding="async"
                           />
                         </button>
                       ) : (
@@ -624,6 +774,7 @@ const ViewNominationsModal = ({
           </table>
         )}
       </div>
+      {pager}
     </motion.div>
   </div>
   );
@@ -637,7 +788,7 @@ const PhotoLightbox = ({ photo, onClose }: { photo: { url: string; name: string 
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.85)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-4" style={{ background: "rgba(0,0,0,0.85)" }} onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -928,6 +1079,7 @@ const AdminPage = () => {
   const shortlisted = submitted.filter(n => n.status === "shortlisted").length;
   const winners = submitted.filter(n => n.status === "winner").length;
   const incompleteLeads = nominations.length - submitted.length;
+  const unverifiedLeads = nominations.filter(neverVerifiedOtp).length;
 
   const categoryCount = submitted.reduce((acc: Record<string, number>, n) => {
     acc[n.award_category] = (acc[n.award_category] || 0) + 1;
@@ -1019,14 +1171,20 @@ const AdminPage = () => {
       toast({ title: "Nothing to copy", description: "No nominations match the current filters.", variant: "destructive" });
       return;
     }
-    const tsv = [COPY_HEADERS, ...filtered.map(nominationRow)]
-      .map((row) => row.map(flattenCell).join("\t"))
-      .join("\n");
     try {
-      await navigator.clipboard.writeText(tsv);
-      toast({ title: `Copied ${filtered.length} nomination${filtered.length !== 1 ? "s" : ""}` });
+      const result = await copyTextWithFallback(nominationsToTsv(filtered), "nominations.tsv");
+      if (result === "copied") {
+        toast({ title: copiedNominationsTitle(filtered) });
+      } else {
+        toast({
+          title: `Downloaded ${filtered.length} nomination${filtered.length !== 1 ? "s" : ""}`,
+          description: uniquePhoneCount(filtered) !== filtered.length
+            ? `${uniquePhoneCount(filtered)} unique phones. Clipboard was too large, so a TSV file was saved instead.`
+            : "Clipboard was too large, so a TSV file was saved instead.",
+        });
+      }
     } catch {
-      toast({ title: "Copy failed", description: "Could not access the clipboard.", variant: "destructive" });
+      toast({ title: "Copy failed", description: "Could not copy or download the list.", variant: "destructive" });
     }
   };
 
@@ -1296,9 +1454,16 @@ const AdminPage = () => {
               <div className="p-4 sm:p-6 border-b border-primary-foreground/10">
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <h2 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">
-                      All Nominations <span className="text-primary-foreground/40 font-normal text-sm">({filtered.length})</span>
-                    </h2>
+                    <div className="min-w-0">
+                      <h2 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">
+                        All Nominations <span className="text-primary-foreground/40 font-normal text-sm">({filtered.length})</span>
+                      </h2>
+                      {funnelFilter === "All" && unverifiedLeads > 0 && (
+                        <p className="text-xs text-primary-foreground/40 mt-0.5">
+                          {unverifiedLeads.toLocaleString("en-IN")} never-verified OTP leads are hidden. Choose “Never verified OTP” or “OTP requested (all leads)” to include them.
+                        </p>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={openViewAll}>
                         <Eye className="w-3.5 h-3.5" /> View all
