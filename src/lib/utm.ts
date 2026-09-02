@@ -92,6 +92,7 @@ function pingUtmHit(params: UtmParams): void {
       utm_source: source,
       utm_medium: medium,
       utm_campaign: campaign,
+      utm_content: (params.utm_content || "").trim().slice(0, 120),
       ...(destination ? { destination } : {}),
     }),
     keepalive: true,
