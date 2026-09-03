@@ -865,6 +865,28 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                   </p>
                 </div>
               </div>
+              {isVideos ? (
+                <div className="mt-2 space-y-0.5 text-[10px] text-white/45">
+                  <p>
+                    With photo {(kindStats?.with_photo_nominations ?? 0).toLocaleString("en-IN")} · Without photo{" "}
+                    {(kindStats?.without_photo_nominations ?? 0).toLocaleString("en-IN")}
+                  </p>
+                  <p>
+                    Finalized images {(kindStats?.images_finalized ?? 0).toLocaleString("en-IN")}
+                    {kindStats?.images_missing
+                      ? ` · missing ${(kindStats.images_missing ?? 0).toLocaleString("en-IN")}`
+                      : ""}
+                  </p>
+                  <p className="text-emerald-300/80">
+                    Videos generated {(kindStats?.videos_generated ?? 0).toLocaleString("en-IN")}
+                  </p>
+                  <p>
+                    Queued {(kindStats?.videos_queued ?? 0).toLocaleString("en-IN")}
+                    {kindStats?.videos_processing ? ` · processing ${kindStats.videos_processing}` : ""}
+                    {kindStats?.videos_failed ? ` · failed ${kindStats.videos_failed}` : ""}
+                  </p>
+                </div>
+              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-2">
               {IMAGE_MANAGEMENT_CATEGORIES.filter((cat) => cat.kind === group.kind).map((cat) => {
@@ -1451,7 +1473,9 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
               <p>Nomination videos: {confirm.eligible_nominations.toLocaleString("en-IN")}</p>
               <p>Already generated: {confirm.already_generated.toLocaleString("en-IN")}</p>
               {confirm.blocked_missing_portrait ? (
-                <p className="text-amber-300">Blocked (no finalized image): {confirm.blocked_missing_portrait}</p>
+                <p className="text-amber-300">
+                  With photo — image not ready: {confirm.blocked_missing_portrait}
+                </p>
               ) : null}
               <p className="text-white font-semibold pt-2">
                 {confirmMode === "regenerate"
@@ -1506,6 +1530,9 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                         }`}
                       >
                         Video {index + 1}
+                        <span className="block text-[9px] opacity-70 truncate max-w-[140px]">
+                          {video.nomination_id}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -1522,8 +1549,19 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                         url={url}
                         title={current.label}
                       />
+                      <p className="text-[11px] text-white/45 text-center break-all">
+                        Nomination ID {current.nomination_id}
+                      </p>
                       <p className="text-[11px] text-white/45 text-center">
-                        {current.label}
+                        {current.teacher_name || current.label}
+                        {current.teacher_phone ? ` · ${current.teacher_phone}` : ""}
+                      </p>
+                      <p className="text-[11px] text-white/45 text-center">
+                        {current.exact_category || current.nomination_kind || ""}
+                        {current.nomination_type ? ` · type ${current.nomination_type}` : ""}
+                      </p>
+                      <p className="text-[11px] text-white/40 text-center">
+                        Video ID {current.video_id || "—"} · Render ID {current.video_render_id || "—"}
                         {current.generated_at
                           ? ` · ${new Date(current.generated_at).toLocaleString("en-IN")}`
                           : ""}

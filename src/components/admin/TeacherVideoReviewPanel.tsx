@@ -20,7 +20,13 @@ import {
   type PortraitStatus,
   type VideoReviewCounts,
   type VideoReviewItem,
+  type VideoReviewCategoryStat,
 } from "@/lib/apiAdmin";
+import {
+  exactCategoryOf,
+  nominationKind,
+  photoStateOf,
+} from "@/lib/nominationKind";
 
 const emptyCounts: VideoReviewCounts = {
   total: 0,
@@ -101,15 +107,11 @@ const reviewBucket = (item: VideoReviewItem) => {
   return "pending";
 };
 
-const KIND_LABEL: Record<string, string> = {
-  student: "Student nominated teacher",
-  teacher: "Teacher nominated teacher",
-  colleague: "Teacher nominated other teacher",
-};
-
 const presentationKey = (item: VideoReviewItem) => {
-  const kind = item.nomination_kind || (item.nomination_type === "teacher" ? "teacher" : "student");
-  const photo = item.photo_state || item.video_category;
+  const kind =
+    item.nomination_kind ||
+    nominationKind({ type: item.nomination_type, student_class: item.student_class });
+  const photo = item.photo_state || photoStateOf(item.teacher_photo_url) || item.video_category;
   return `${kind}_${photo}`;
 };
 
@@ -265,6 +267,7 @@ const TeacherVideoReviewPanel = () => {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<VideoReviewItem[]>([]);
   const [counts, setCounts] = useState<VideoReviewCounts>(emptyCounts);
+  const [categoryStats, setCategoryStats] = useState<VideoReviewCategoryStat[]>([]);
   const [filter, setFilter] = useState<string>("ready_for_review");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -278,6 +281,7 @@ const TeacherVideoReviewPanel = () => {
       const data = await adminGetVideoReviews();
       setItems(Array.isArray(data.items) ? data.items : []);
       setCounts({ ...emptyCounts, ...(data.counts || {}) });
+      setCategoryStats(Array.isArray(data.category_stats) ? data.category_stats : []);
     } catch (err: unknown) {
       if (quiet) return;
       const message = err instanceof Error ? err.message : "Failed to load video reviews";
@@ -332,6 +336,7 @@ const TeacherVideoReviewPanel = () => {
       const data = await adminGetVideoReviews();
       setItems(Array.isArray(data.items) ? data.items : []);
       setCounts({ ...emptyCounts, ...(data.counts || {}) });
+      setCategoryStats(Array.isArray(data.category_stats) ? data.category_stats : []);
       toast({
         title: action === "approve" ? "Video approved" : "Video rejected",
         description:
@@ -381,6 +386,27 @@ const TeacherVideoReviewPanel = () => {
           </div>
         ))}
       </div>
+
+      {categoryStats.length ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {categoryStats.map((row) => (
+            <div key={row.id} className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/[0.04] p-3">
+              <p className="text-[11px] font-semibold text-primary-foreground/80">{row.label}</p>
+              <p className="text-[11px] text-primary-foreground/50 mt-1">
+                {row.nominations.toLocaleString("en-IN")} nominations · {row.unique_teachers.toLocaleString("en-IN")} unique teachers
+              </p>
+              <p className="text-[11px] text-emerald-300/80 mt-0.5">
+                Videos generated {row.videos_generated.toLocaleString("en-IN")}
+              </p>
+              <p className="text-[11px] text-primary-foreground/45">
+                Queued {row.videos_queued.toLocaleString("en-IN")}
+                {row.videos_failed ? ` · failed ${row.videos_failed}` : ""}
+                {row.identity_mismatches ? ` · ${row.identity_mismatches} preserved mismatch` : ""}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-primary-foreground/10 space-y-3">
@@ -450,7 +476,7 @@ const TeacherVideoReviewPanel = () => {
                       />
                     ) : (
                       <div className="mx-auto w-full max-w-[220px] rounded-xl border border-dashed border-white/15 bg-black/30 flex items-center justify-center text-white/35 text-xs text-center p-4" style={{ aspectRatio: "9 / 16" }}>
-                        No generated video yet
+                        {item.identity_mismatch ? "Not this category's video" : "No generated video yet"}
                       </div>
                     )}
                   </div>
@@ -458,11 +484,27 @@ const TeacherVideoReviewPanel = () => {
                     <div className="min-w-0">
                       <p className="font-heading font-bold text-white truncate">{item.teacher_name || "Unnamed teacher"}</p>
                       <p className="text-xs text-primary-foreground/50 truncate">Nominated by {nominatorLabel(item)}</p>
-                      <p className="text-[11px] text-primary-foreground/35 break-all">Nomination {item.nomination_id}</p>
+                      <p className="text-[11px] text-primary-foreground/35 break-all">Nomination ID {item.nomination_id}</p>
                       <p className="text-[11px] font-semibold mt-1">
-                        {KIND_LABEL[item.nomination_kind || ""] || item.nomination_type || "Nomination"} ·{" "}
-                        {item.video_category === "with_photo" ? "With Photo" : "Without Photo"}
+                        {item.exact_category ||
+                          exactCategoryOf(
+                            item.nomination_kind ||
+                              nominationKind({ type: item.nomination_type, student_class: item.student_class }),
+                            item.photo_state || item.video_category || "without_photo"
+                          )}
                       </p>
+                      <p className="text-[11px] text-primary-foreground/55">
+                        Nomination type: {item.nomination_type || "—"}
+                      </p>
+                      <p className="text-[11px] text-primary-foreground/55">
+                        Video ID: {item.video_id || "—"} · Render ID: {item.video_render_id || "—"}
+                      </p>
+                      {item.identity_mismatch ? (
+                        <p className="text-[11px] text-amber-300">
+                          A video record exists for another template/category and is preserved. It is not shown here.
+                          {item.identity_mismatch_reason ? ` (${item.identity_mismatch_reason})` : ""}
+                        </p>
+                      ) : null}
                       <p className="text-[11px] text-primary-foreground/55">
                         Photo: {item.teacher_photo_provided ? "YES" : "NO"}
                       </p>

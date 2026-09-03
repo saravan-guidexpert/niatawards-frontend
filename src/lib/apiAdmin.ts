@@ -420,6 +420,7 @@ export type PortraitReportSummary = {
 
 export type VideoReviewItem = {
   nomination_id: string;
+  video_id?: string | null;
   teacher_name: string | null;
   teacher_phone: string | null;
   portrait_phone: string | null;
@@ -438,6 +439,10 @@ export type VideoReviewItem = {
   nomination_type: string;
   nomination_kind?: "student" | "teacher" | "colleague";
   photo_state?: "with_photo" | "without_photo";
+  exact_category?: string | null;
+  video_template?: string | null;
+  identity_mismatch?: boolean;
+  identity_mismatch_reason?: string | null;
   student_class: string | null;
   created_at: string | null;
   eligible: boolean;
@@ -477,8 +482,23 @@ export type VideoReviewCounts = {
   colleague_without_photo?: number;
 };
 
+export type VideoReviewCategoryStat = {
+  id: string;
+  kind: "student" | "teacher" | "colleague";
+  photo: "with_photo" | "without_photo";
+  label: string;
+  nominations: number;
+  unique_teachers: number;
+  videos_generated: number;
+  videos_queued: number;
+  videos_failed: number;
+  identity_mismatches: number;
+};
+
 export const adminGetVideoReviews = () =>
-  adminRequest<{ items: VideoReviewItem[]; counts: VideoReviewCounts }>("/api/admin/video-reviews");
+  adminRequest<{ items: VideoReviewItem[]; counts: VideoReviewCounts; category_stats?: VideoReviewCategoryStat[] }>(
+    "/api/admin/video-reviews"
+  );
 
 export const adminReviewVideo = (nominationId: string, action: "approve" | "reject", reason?: string) =>
   adminRequest<VideoReviewItem>(`/api/admin/video-reviews/${encodeURIComponent(nominationId)}`, {
@@ -530,6 +550,16 @@ export type TeacherPortraitKindSummary = {
   group: string;
   nominations: number;
   unique_teachers: number;
+  with_photo?: number;
+  without_photo?: number;
+  with_photo_nominations?: number;
+  without_photo_nominations?: number;
+  images_finalized?: number;
+  images_missing?: number;
+  videos_generated?: number;
+  videos_queued?: number;
+  videos_processing?: number;
+  videos_failed?: number;
 };
 
 export type TeacherPortraitCandidate = {
@@ -812,9 +842,16 @@ export const adminGetTeacherVideoPreview = (opts: { phone: string; kind: string;
 
 export type TeacherGeneratedVideo = {
   nomination_id: string;
+  video_id?: string | null;
   video_url: string;
   video_render_id: string | null;
   generated_at: string | null;
+  nomination_type?: string | null;
+  nomination_kind?: string | null;
+  exact_category?: string | null;
+  video_template?: string | null;
+  teacher_name?: string | null;
+  teacher_phone?: string | null;
   label: string;
 };
 
