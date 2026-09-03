@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
   Clapperboard,
-  ImageOff,
   Loader2,
   Search,
   XCircle,
@@ -14,9 +13,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cloudinaryDisplayUrl } from "@/lib/cloudinaryUrl";
+import { API_URL } from "@/lib/apiBase";
 import {
   adminGetVideoReviews,
   adminReviewVideo,
+  type PortraitStatus,
   type VideoReviewCounts,
   type VideoReviewItem,
 } from "@/lib/apiAdmin";
@@ -25,19 +26,60 @@ const emptyCounts: VideoReviewCounts = {
   total: 0,
   with_photo: 0,
   without_photo: 0,
+  needs_with_photo_regen: 0,
   ready_for_review: 0,
   approved: 0,
   rejected: 0,
   failed: 0,
+  student_with_photo: 0,
+  student_without_photo: 0,
+  teacher_with_photo: 0,
+  teacher_without_photo: 0,
+  colleague_with_photo: 0,
+  colleague_without_photo: 0,
 };
 
 const FILTERS = [
   { value: "all", label: "All" },
+  { value: "student_with_photo", label: "Student nominated teacher — with photo" },
+  { value: "student_without_photo", label: "Student nominated teacher — without photo" },
+  { value: "teacher_with_photo", label: "Teacher nominated teacher — with photo" },
+  { value: "teacher_without_photo", label: "Teacher nominated teacher — without photo" },
+  { value: "colleague_with_photo", label: "Teacher nominated other teacher — with photo" },
+  { value: "colleague_without_photo", label: "Teacher nominated other teacher — without photo" },
   { value: "ready_for_review", label: "Ready for Review" },
   { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
   { value: "failed", label: "Generation Failed" },
+  { value: "portrait_ready", label: "Portrait Ready" },
+  { value: "portrait_needs_review", label: "Needs Review" },
+  { value: "portrait_processing", label: "Processing" },
+  { value: "portrait_failed", label: "Failed" },
 ] as const;
+
+const PORTRAIT_STATUS_LABEL: Record<PortraitStatus, string> = {
+  NOT_STARTED: "Not Started",
+  PROCESSING: "Processing",
+  READY: "Ready",
+  NEEDS_REVIEW: "Needs Review",
+  FAILED: "Failed",
+  NOT_PROVIDED: "Not Provided",
+};
+
+const mediaUrl = (value: string | null | undefined) => {
+  const path = String(value || "").trim();
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+const CHECKERBOARD = {
+  backgroundColor: "#ececec",
+  backgroundImage:
+    "linear-gradient(45deg, #d4d4d4 25%, transparent 25%), linear-gradient(-45deg, #d4d4d4 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #d4d4d4 75%), linear-gradient(-45deg, transparent 75%, #d4d4d4 75%)",
+  backgroundSize: "14px 14px",
+  backgroundPosition: "0 0, 0 7px, 7px -7px, -7px 0",
+} as const;
 
 const formatWhen = (value: string | null) => {
   if (!value) return "—";
@@ -59,6 +101,38 @@ const reviewBucket = (item: VideoReviewItem) => {
   return "pending";
 };
 
+const KIND_LABEL: Record<string, string> = {
+  student: "Student nominated teacher",
+  teacher: "Teacher nominated teacher",
+  colleague: "Teacher nominated other teacher",
+};
+
+const presentationKey = (item: VideoReviewItem) => {
+  const kind = item.nomination_kind || (item.nomination_type === "teacher" ? "teacher" : "student");
+  const photo = item.photo_state || item.video_category;
+  return `${kind}_${photo}`;
+};
+
+const portraitFilterMatch = (item: VideoReviewItem, filter: string) => {
+  if (
+    filter === "student_with_photo" ||
+    filter === "student_without_photo" ||
+    filter === "teacher_with_photo" ||
+    filter === "teacher_without_photo" ||
+    filter === "colleague_with_photo" ||
+    filter === "colleague_without_photo"
+  ) {
+    return presentationKey(item) === filter;
+  }
+  if (filter === "with_photo") return item.video_category === "with_photo";
+  if (filter === "without_photo") return item.video_category === "without_photo";
+  if (filter === "portrait_ready") return item.portrait_status === "READY";
+  if (filter === "portrait_needs_review") return item.portrait_status === "NEEDS_REVIEW";
+  if (filter === "portrait_processing") return item.portrait_status === "PROCESSING";
+  if (filter === "portrait_failed") return item.portrait_status === "FAILED";
+  return null;
+};
+
 const generationLabel = (item: VideoReviewItem) => {
   if (!item.eligible) return "Not eligible";
   if (item.generation_status === "generated" && item.video_url) return "Generated";
@@ -78,6 +152,14 @@ const reviewLabel = (item: VideoReviewItem) => {
   return map[item.review_status] || item.review_status;
 };
 
+const videoPlayerUrl = (item: VideoReviewItem) => {
+  const base = mediaUrl(item.video_url);
+  if (!base) return null;
+  const rid = String(item.video_render_id || "").trim();
+  if (!rid) return base;
+  return `${base}${base.includes("?") ? "&" : "?"}v=${encodeURIComponent(rid)}`;
+};
+
 const PortraitVideo = ({ url, title }: { url: string; title: string }) => (
   <div className="mx-auto w-full max-w-[220px] rounded-xl overflow-hidden border border-white/10 bg-black">
     <div className="relative w-full" style={{ paddingTop: "177.78%" }}>
@@ -92,6 +174,72 @@ const PortraitVideo = ({ url, title }: { url: string; title: string }) => (
     </div>
   </div>
 );
+
+const FrameLabel = ({ children }: { children: string }) => (
+  <p className="text-[10px] font-semibold tracking-wide text-primary-foreground/45 mb-1.5 uppercase">{children}</p>
+);
+
+const StillFrame = ({
+  label,
+  empty,
+  checkerboard,
+  children,
+}: {
+  label: string;
+  empty?: string;
+  checkerboard?: boolean;
+  children?: ReactNode;
+}) => (
+  <div className="min-w-0">
+    <FrameLabel>{label}</FrameLabel>
+    <div
+      className="relative w-full overflow-hidden rounded-xl border border-white/10"
+      style={{ aspectRatio: "9 / 16", ...(checkerboard ? CHECKERBOARD : { background: "rgba(0,0,0,0.35)" }) }}
+    >
+      {children || (
+        <div className="absolute inset-0 flex items-center justify-center text-center px-2 text-[11px] text-white/40">
+          {empty || "Not Provided"}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+const portraitStatusText = (item: VideoReviewItem) =>
+  PORTRAIT_STATUS_LABEL[item.portrait_status] || item.portrait_status;
+
+const ValidationList = ({ item }: { item: VideoReviewItem }) => {
+  const report = item.portrait_report;
+  if (!report || item.portrait_status === "NOT_PROVIDED") return null;
+  const rows: { ok: boolean; warn?: boolean; text: string }[] = [];
+  if (report.background_removed === true) rows.push({ ok: true, text: "Background removed" });
+  if (report.background_removed === false) rows.push({ ok: false, warn: true, text: "Background not removed" });
+  if (report.alpha_valid === true) rows.push({ ok: true, text: "Alpha valid" });
+  if (report.alpha_valid === false) rows.push({ ok: false, warn: true, text: "Alpha invalid" });
+  if (report.halo_detected === false) rows.push({ ok: true, text: "No halo detected" });
+  if (report.halo_detected === true) rows.push({ ok: false, warn: true, text: "Halo detected" });
+  if (report.composition_valid === true) rows.push({ ok: true, text: "Composition valid" });
+  if (report.composition_valid === false) rows.push({ ok: false, warn: true, text: "Composition issue" });
+  if (report.source_appearance_preserved === true) rows.push({ ok: true, text: "Source appearance preserved" });
+  if (report.validation_status === "needs_review" || report.validation_status === "needs_manual_review") {
+    rows.push({ ok: false, warn: true, text: "Needs manual review" });
+  }
+  if (!rows.length) return null;
+  return (
+    <div>
+      <p className="text-[10px] font-semibold tracking-wide text-primary-foreground/45 uppercase mb-1.5">
+        Portrait Validation
+      </p>
+      <ul className="space-y-0.5 text-[11px] text-primary-foreground/65">
+        {rows.map((row) => (
+          <li key={row.text}>
+            {row.ok ? "✓" : "⚠"} {row.text}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
 
 const TeacherVideoReviewPanel = () => {
   const { toast } = useToast();
@@ -126,10 +274,13 @@ const TeacherVideoReviewPanel = () => {
     const q = search.trim().toLowerCase();
     return items.filter((item) => {
       const bucket = reviewBucket(item);
+      const portraitMatch = portraitFilterMatch(item, filter);
       const matchFilter =
-        filter === "all" ||
-        bucket === filter ||
-        (filter === "ready_for_review" && bucket === "regeneration_required");
+        portraitMatch !== null
+          ? portraitMatch
+          : filter === "all" ||
+            bucket === filter ||
+            (filter === "ready_for_review" && bucket === "regeneration_required");
       if (!matchFilter) return false;
       if (!q) return true;
       const haystack = [
@@ -169,13 +320,13 @@ const TeacherVideoReviewPanel = () => {
   };
 
   const cards = [
-    { label: "Total student nominations", value: counts.total },
-    { label: "With teacher photo", value: counts.with_photo },
-    { label: "Without teacher photo", value: counts.without_photo },
+    { label: "Total submitted nominations", value: counts.total },
+    { label: "Student · with photo", value: counts.student_with_photo || 0 },
+    { label: "Student · without photo", value: counts.student_without_photo || 0 },
+    { label: "Teacher · with photo", value: counts.teacher_with_photo || 0 },
+    { label: "Colleague · with photo", value: counts.colleague_with_photo || 0 },
     { label: "Ready for Review", value: counts.ready_for_review },
     { label: "Approved", value: counts.approved },
-    { label: "Rejected", value: counts.rejected },
-    { label: "Generation Failed", value: counts.failed },
   ];
 
   if (loading) {
@@ -209,8 +360,8 @@ const TeacherVideoReviewPanel = () => {
               Teacher Video Review
             </h2>
             <p className="text-xs text-primary-foreground/40 mt-1">
-              One row per submitted student nomination. Teacher photo is optional. Approve means the video
-              may be used later for messaging — nothing is sent from this screen.
+              Submitted nominations classified by kind × source photo. Video generation currently covers student
+              nominations. Approve means the video may be used later for messaging — nothing is sent from this screen.
             </p>
           </div>
           <div className="flex flex-col gap-2">
@@ -260,8 +411,13 @@ const TeacherVideoReviewPanel = () => {
                   className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/[0.04] p-4 grid lg:grid-cols-[220px_1fr] gap-4"
                 >
                   <div>
+                    <FrameLabel>Generated Video</FrameLabel>
                     {item.video_url ? (
-                      <PortraitVideo url={item.video_url} title={`Nomination ${item.nomination_id}`} />
+                      <PortraitVideo
+                        key={`${item.video_url}:${item.video_render_id || ""}`}
+                        url={videoPlayerUrl(item) || item.video_url}
+                        title={`Nomination ${item.nomination_id}`}
+                      />
                     ) : (
                       <div className="mx-auto w-full max-w-[220px] rounded-xl border border-dashed border-white/15 bg-black/30 flex items-center justify-center text-white/35 text-xs text-center p-4" style={{ aspectRatio: "9 / 16" }}>
                         No generated video yet
@@ -269,36 +425,93 @@ const TeacherVideoReviewPanel = () => {
                     )}
                   </div>
                   <div className="min-w-0 space-y-3">
-                    <div className="flex items-start gap-3">
-                      {item.teacher_photo_url ? (
-                        <img
-                          src={cloudinaryDisplayUrl(item.teacher_photo_url, { width: 96, height: 96, crop: "fill" })}
-                          alt={item.teacher_name || "Teacher"}
-                          width={48}
-                          height={48}
-                          className="w-12 h-12 rounded-lg object-cover border border-white/10 flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/20 flex-shrink-0">
-                          <ImageOff className="w-4 h-4" />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="font-heading font-bold text-white truncate">{item.teacher_name || "Unnamed teacher"}</p>
-                        <p className="text-xs text-primary-foreground/50 truncate">Nominated by {nominatorLabel(item)}</p>
-                        <p className="text-[11px] text-primary-foreground/35 break-all">Nomination {item.nomination_id}</p>
+                    <div className="min-w-0">
+                      <p className="font-heading font-bold text-white truncate">{item.teacher_name || "Unnamed teacher"}</p>
+                      <p className="text-xs text-primary-foreground/50 truncate">Nominated by {nominatorLabel(item)}</p>
+                      <p className="text-[11px] text-primary-foreground/35 break-all">Nomination {item.nomination_id}</p>
+                      <p className="text-[11px] font-semibold mt-1">
+                        {KIND_LABEL[item.nomination_kind || ""] || item.nomination_type || "Nomination"} ·{" "}
+                        {item.video_category === "with_photo" ? "With Photo" : "Without Photo"}
+                      </p>
+                      <p className="text-[11px] text-primary-foreground/55">
+                        Photo: {item.teacher_photo_provided ? "YES" : "NO"}
+                      </p>
+                      {item.category_mismatch ? (
+                        <p className="text-[11px] text-amber-300">
+                          Current video used no portrait — queued for with-photo regeneration
+                        </p>
+                      ) : null}
+                      <p className="text-[11px] text-primary-foreground/55 mt-1">Teacher Phone: {item.teacher_phone || "—"}</p>
+                      <p className="text-[11px] text-primary-foreground/55">Portrait Phone: {item.portrait_phone || "—"}</p>
+                      <p className="text-[11px] font-semibold mt-0.5">
+                        Mapping: {item.portrait_mapping || "—"}
+                        {item.portrait_mapping_reason && item.portrait_mapping !== "MATCH" ? ` (${item.portrait_mapping_reason})` : ""}
+                      </p>
+                      <p className="text-[11px] text-primary-foreground/55">
+                        Category Icon: {item.category_icon_filename || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold tracking-wide text-primary-foreground/45 uppercase mb-2">
+                        Teacher Portrait
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <StillFrame
+                          label="Original Photo"
+                          empty={item.teacher_photo_provided ? "Unavailable" : "Not Provided"}
+                        >
+                          {item.teacher_photo_url ? (
+                            <img
+                              src={cloudinaryDisplayUrl(item.teacher_photo_url, { width: 360, crop: "limit" })}
+                              alt={`Original photo for nomination ${item.nomination_id}`}
+                              className="absolute inset-0 h-full w-full object-contain"
+                            />
+                          ) : null}
+                        </StillFrame>
+                        <StillFrame
+                          label="Prepared Portrait"
+                          checkerboard={Boolean(mediaUrl(item.portrait_url))}
+                          empty={item.portrait_status === "NOT_PROVIDED" ? "Not Provided" : "No portrait yet"}
+                        >
+                          {mediaUrl(item.portrait_url) ? (
+                            <img
+                              src={mediaUrl(item.portrait_url) || ""}
+                              alt={`Prepared portrait for nomination ${item.nomination_id}`}
+                              className="absolute inset-0 h-full w-full object-contain"
+                            />
+                          ) : null}
+                        </StillFrame>
+                        <StillFrame
+                          label="Template Preview"
+                          empty={item.portrait_status === "NOT_PROVIDED" ? "Not Provided" : "No template preview yet"}
+                        >
+                          {mediaUrl(item.portrait_preview_url) ? (
+                            <img
+                              src={mediaUrl(item.portrait_preview_url) || ""}
+                              alt={`Template preview for nomination ${item.nomination_id}`}
+                              className="absolute inset-0 h-full w-full object-contain bg-[#f6f6f6]"
+                            />
+                          ) : null}
+                        </StillFrame>
                       </div>
+                      <p className="text-xs text-primary-foreground/55 mt-2">
+                        Portrait Status: {portraitStatusText(item)}
+                      </p>
                     </div>
                     <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
                       <span className="px-2 py-0.5 rounded-full border border-white/15 text-white/70">{generationLabel(item)}</span>
                       <span className="px-2 py-0.5 rounded-full border border-white/15 text-white/70">{reviewLabel(item)}</span>
                       <span className="px-2 py-0.5 rounded-full border border-white/15 text-white/70">
-                        Teacher Photo: {item.teacher_photo_provided || item.teacher_photo_url ? "Available" : "Not Provided"}
+                        Photo: {item.teacher_photo_provided ? "YES" : "NO"}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full border border-white/15 text-white/70">
+                        Portrait: {portraitStatusText(item)}
                       </span>
                       {item.ready_for_message && (
                         <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 text-emerald-300">Ready for message (not sent)</span>
                       )}
                     </div>
+                    <ValidationList item={item} />
                     <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-primary-foreground/55">
                       <p>Teacher phone: {item.teacher_phone || "—"}</p>
                       <p>Student phone: {item.nominator_phone || "—"}</p>

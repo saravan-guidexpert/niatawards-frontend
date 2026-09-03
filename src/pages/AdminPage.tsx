@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Award, Users, TrendingUp, Download, Search,
-  CheckCircle2, XCircle, Eye, BarChart3, ArrowLeft, Star,
-  Loader2, RefreshCw, LogOut, Pencil, X, Save,
-  Calendar as CalendarIcon, Copy, ImageOff, Megaphone, Globe2, Target, Shield,
-  Hourglass, MessageCircle, Trash2, GraduationCap, Clapperboard
+  CheckCircle2, Eye, BarChart3, Star,
+  Loader2, RefreshCw, Pencil, X, Save,
+  Calendar as CalendarIcon, Copy, ImageOff, Globe2,
+  Hourglass, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,8 +26,12 @@ import DigitalMarketingPanel from "@/components/admin/DigitalMarketingPanel";
 import AccessManagementPanel from "@/components/admin/AccessManagementPanel";
 import FunnelAnalytics from "@/components/admin/FunnelAnalytics";
 import UniqueTeachersPanel from "@/components/admin/UniqueTeachersPanel";
+import TeacherImageManagementPanel from "@/components/admin/TeacherImageManagementPanel";
+import OfflineTeamPanel from "@/components/admin/OfflineTeamPanel";
 import TeacherVideoReviewPanel from "@/components/admin/TeacherVideoReviewPanel";
 import WhatsAppOpsPanel from "@/components/admin/WhatsAppOpsPanel";
+import AdminSidebar from "@/components/admin/AdminSidebar";
+import { adminTabLabel, isTabAllowed, type AdminTab } from "@/lib/adminNav";
 import {
   allowedAdminTabs,
   firstAllowedTab,
@@ -37,15 +41,7 @@ import {
   isSuperAdmin,
   PANEL_PERMISSIONS,
   setAdminSession,
-  type PanelPermission,
 } from "@/lib/adminSession";
-
-// The teachers view is another cut of the nominations data, so it rides on the
-// nominations permission rather than introducing a new one.
-type AdminTab = PanelPermission | "access" | "teachers" | "videos";
-
-const isTabAllowed = (tab: AdminTab, allowed: Array<PanelPermission | "access">) =>
-  tab === "teachers" || tab === "videos" ? allowed.includes("nominations") : allowed.includes(tab);
 
 const awardCategories = [
   "Student Transformation Award",
@@ -1290,9 +1286,25 @@ const AdminPage = () => {
     );
   }
 
+  const campaignBadge = submitted.filter(hasUtm).length;
+
   return (
-    <div className="min-h-screen" style={{ background: "hsl(0,0%,8%)" }}>
-      {/* Edit Modal */}
+    <div className="min-h-screen lg:flex" style={{ background: "hsl(0,0%,8%)" }}>
+      <AdminSidebar
+        activeTab={activeTab}
+        allowed={tabs}
+        badges={campaignBadge > 0 ? { campaigns: campaignBadge } : undefined}
+        user={adminUser}
+        onSelect={setActiveTab}
+        onLogout={handleLogout}
+        actions={
+          <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-8 px-2" onClick={fetchNominations}>
+            <RefreshCw className="w-3.5 h-3.5" />
+          </Button>
+        }
+      />
+
+      <div className="min-w-0 flex-1 flex flex-col">
       <AnimatePresence>
         {editingNom && (
           <EditModal
@@ -1319,76 +1331,35 @@ const AdminPage = () => {
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <div className="border-b border-primary-foreground/10 bg-[#6B1212]/95 backdrop-blur-lg sticky top-0 z-30">
-        <div className="container flex flex-wrap items-center justify-between gap-2 min-h-14 py-2 px-3 sm:px-4">
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-            <Link to="/" className="text-primary-foreground/50 hover:text-primary-foreground transition-colors flex-shrink-0">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#8B1A1A] to-[#6B1212] ring-1 ring-white/10 flex items-center justify-center flex-shrink-0">
-              <img src="/niat-logo-tight.webp" alt="NIAT" width={20} height={20} className="w-5 h-5 object-contain" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">Admin Dashboard</h1>
-              <p className="hidden sm:block text-xs text-primary-foreground/40">
-                {adminUser?.name || adminUser?.username
-                  ? `Signed in as ${adminUser.name || adminUser.username}${adminUser.role === "super_admin" ? " · Super admin" : ""}`
-                  : "Future-Ready Educator Awards 2026"}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
-              <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
-            </Button>
-            {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && activeTab !== "videos" && (
-              <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
-                <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span>
-              </Button>
-            )}
-            <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={handleLogout}>
-              <LogOut className="w-3.5 h-3.5" /><span className="hidden sm:inline">Logout</span>
-            </Button>
-          </div>
+      <div className="hidden lg:flex sticky top-0 z-30 items-center justify-between gap-3 min-h-14 px-5 xl:px-8 border-b border-primary-foreground/10 bg-[#0f0808]/90 backdrop-blur-lg">
+        <div className="min-w-0">
+          <h1 className="font-heading text-base xl:text-lg font-bold text-primary-foreground truncate">{adminTabLabel(activeTab)}</h1>
+          <p className="text-[11px] text-primary-foreground/40 truncate">
+            {adminUser?.name || adminUser?.username
+              ? `${adminUser.name || adminUser.username}${adminUser.role === "super_admin" ? " · Super admin" : ""}`
+              : "Future-Ready Educator Awards 2026"}
+          </p>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b border-primary-foreground/10 bg-gradient-dark">
-        <div className="container px-3 sm:px-4 flex overflow-x-auto">
-          {[
-            { id: "nominations" as const, label: "Nominations", icon: Users },
-            { id: "teachers" as const, label: "Unique Teachers", icon: GraduationCap },
-            { id: "videos" as const, label: "Teacher Video Review", icon: Clapperboard },
-            { id: "campaigns" as const, label: "Influencer Tracking", icon: Megaphone },
-            { id: "digital" as const, label: "Digital Marketing", icon: Target },
-            { id: "whatsapp" as const, label: "WhatsApp", icon: MessageCircle },
-            { id: "access" as const, label: "Access", icon: Shield },
-          ].filter((tab) => isTabAllowed(tab.id, tabs)).map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
-                activeTab === tab.id
-                  ? "border-secondary text-secondary"
-                  : "border-transparent text-primary-foreground/40 hover:text-primary-foreground/70"
-              }`}>
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-              {tab.id === "campaigns" && submitted.filter(hasUtm).length > 0 && (
-                <span className="ml-1 bg-secondary/20 text-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
-                  {submitted.filter(hasUtm).length}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Link to="/" className="text-[11px] font-semibold text-primary-foreground/45 hover:text-primary-foreground px-2">
+            View site
+          </Link>
+          <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
+            <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
+          </Button>
+          {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && activeTab !== "teacher-images" && activeTab !== "videos" && activeTab !== "offline" && (
+            <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
+              <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span>
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Content */}
-      <div className={`py-6 sm:py-8 px-3 sm:px-4 ${
-        activeTab === "nominations" || activeTab === "teachers" || activeTab === "videos"
-          ? "mx-auto w-full max-w-7xl xl:max-w-[1600px] 2xl:max-w-[1840px] 2xl:px-8"
-          : "container"
+      <div className={`flex-1 py-6 sm:py-8 px-3 sm:px-5 xl:px-8 ${
+        activeTab === "nominations" || activeTab === "teachers" || activeTab === "teacher-images" || activeTab === "videos" || activeTab === "offline"
+          ? "w-full"
+          : "w-full max-w-6xl"
       }`}>
         {activeTab === "access" ? (
           <AccessManagementPanel />
@@ -1396,6 +1367,8 @@ const AdminPage = () => {
           <WhatsAppOpsPanel />
         ) : activeTab === "videos" ? (
           <TeacherVideoReviewPanel />
+        ) : activeTab === "teacher-images" ? (
+          <TeacherImageManagementPanel />
         ) : activeTab === "nominations" ? (
           <>
             <FunnelAnalytics
@@ -1844,6 +1817,12 @@ const AdminPage = () => {
             setViewingTitle(title);
             setViewingNoms(list);
           }} />
+        ) : activeTab === "offline" ? (
+          <OfflineTeamPanel nominations={submitted} onView={(noms, title) => {
+            const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
+            setViewingTitle(title);
+            setViewingNoms(list);
+          }} />
         ) : activeTab === "campaigns" ? (
           <CampaignsPanel nominations={submitted} onView={(noms, title) => {
             const list = Array.isArray(noms) ? noms.filter(Boolean) : [];
@@ -1857,6 +1836,7 @@ const AdminPage = () => {
             setViewingNoms(list);
           }} />
         ) : null}
+      </div>
       </div>
     </div>
   );

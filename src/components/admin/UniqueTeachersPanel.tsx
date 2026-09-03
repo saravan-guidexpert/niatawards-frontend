@@ -242,9 +242,16 @@ const TeacherPhoto = ({ t, size }: { t: TeacherRow; size: number }) =>
 interface Props {
   nominations: any[];
   onView: (nominations: any[], title: string) => void;
+  title?: string;
+  subtitle?: string;
 }
 
-const UniqueTeachersPanel = ({ nominations, onView }: Props) => {
+const UniqueTeachersPanel = ({
+  nominations,
+  onView,
+  title = "Unique teachers",
+  subtitle = "One row per teacher, matched on their phone number across student submissions, self nominations, and teachers nominating others.",
+}: Props) => {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("All");
@@ -362,12 +369,9 @@ const UniqueTeachersPanel = ({ nominations, onView }: Props) => {
             <div className="min-w-0">
               <h2 className="font-heading text-base sm:text-lg font-bold text-primary-foreground flex items-center gap-2">
                 <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-secondary" />
-                Unique teachers
+                {title}
               </h2>
-              <p className="text-xs text-primary-foreground/40 mt-1">
-                One row per teacher, matched on their phone number across student submissions, self
-                nominations, and teachers nominating others.
-              </p>
+              <p className="text-xs text-primary-foreground/40 mt-1">{subtitle}</p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
               <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={copyAll}>

@@ -401,38 +401,80 @@ export const adminWhatsAppRunRetries = () =>
     elapsedMs: number;
   }>("/api/admin/whatsapp-ops/actions/run-retries", { method: "POST" });
 
+export type PortraitStatus =
+  | "NOT_STARTED"
+  | "PROCESSING"
+  | "READY"
+  | "NEEDS_REVIEW"
+  | "FAILED"
+  | "NOT_PROVIDED";
+
+export type PortraitReportSummary = {
+  validation_status: string | null;
+  background_removed: boolean | null;
+  alpha_valid: boolean | null;
+  halo_detected: boolean | null;
+  composition_valid: boolean | null;
+  source_appearance_preserved: boolean | null;
+};
+
 export type VideoReviewItem = {
   nomination_id: string;
   teacher_name: string | null;
   teacher_phone: string | null;
+  portrait_phone: string | null;
+  portrait_mapping: "MATCH" | "MISMATCH" | "NO_PORTRAIT";
+  portrait_mapping_reason: string | null;
   teacher_photo_url: string | null;
   teacher_photo_provided: boolean;
+  has_source_photo: boolean;
+  video_category: "with_photo" | "without_photo";
+  rendered_video_category: "with_photo" | "without_photo" | null;
+  photo_used: boolean;
+  category_mismatch: boolean;
   student_name: string | null;
   nominator_name: string | null;
   nominator_phone: string | null;
   nomination_type: string;
+  nomination_kind?: "student" | "teacher" | "colleague";
+  photo_state?: "with_photo" | "without_photo";
   student_class: string | null;
   created_at: string | null;
   eligible: boolean;
   generation_status: string;
   review_status: string;
   video_url: string | null;
+  video_render_id: string | null;
+  category_icon_id: string | null;
+  category_icon_filename: string | null;
+  audio_filename: string | null;
   generated_at: string | null;
   approved_at: string | null;
   rejected_at: string | null;
   rejection_reason: string | null;
   ready_for_message: boolean;
   regenerate_available: boolean;
+  portrait_status: PortraitStatus;
+  portrait_url: string | null;
+  portrait_preview_url: string | null;
+  portrait_report: PortraitReportSummary | null;
 };
 
 export type VideoReviewCounts = {
   total: number;
   with_photo: number;
   without_photo: number;
+  needs_with_photo_regen?: number;
   ready_for_review: number;
   approved: number;
   rejected: number;
   failed: number;
+  student_with_photo?: number;
+  student_without_photo?: number;
+  teacher_with_photo?: number;
+  teacher_without_photo?: number;
+  colleague_with_photo?: number;
+  colleague_without_photo?: number;
 };
 
 export const adminGetVideoReviews = () =>
@@ -443,3 +485,119 @@ export const adminReviewVideo = (nominationId: string, action: "approve" | "reje
     method: "PATCH",
     body: JSON.stringify(action === "reject" ? { action, reason } : { action }),
   });
+
+export type PortraitAdminStatus =
+  | "NOT_GENERATED"
+  | "GENERATING"
+  | "GENERATED"
+  | "NEEDS_REVIEW"
+  | "FAILED"
+  | "NO_PHOTO";
+
+export type TeacherPortraitCategorySummary = {
+  id: string;
+  kind: "student" | "teacher" | "colleague";
+  photo: "with_photo" | "without_photo";
+  group: string;
+  photoLabel: string;
+  unique_teachers: number;
+  status: Record<PortraitAdminStatus, number>;
+};
+
+export type TeacherPortraitCandidate = {
+  id: string;
+  teacher_name: string;
+  photo_url: string;
+  created_at: string | null;
+};
+
+export type TeacherPortraitListItem = {
+  phone: string;
+  name: string;
+  kind: "student" | "teacher" | "colleague";
+  photo: "with_photo" | "without_photo";
+  nomination_count: number;
+  portrait_status: PortraitAdminStatus;
+  cropped_cloudinary_url: string | null;
+  source_nomination_id: string | null;
+  source_photo_url: string | null;
+  portrait_error: string | null;
+  generated_at: string | null;
+  finalized_at: string | null;
+  crop_version: string | null;
+  candidates: TeacherPortraitCandidate[];
+};
+
+export type TeacherPortraitGenerateResult = {
+  ok: boolean;
+  skipped?: boolean;
+  reason?: string;
+  phone: string;
+  cropped_cloudinary_url?: string;
+  source_nomination_id?: string;
+  needs_review?: boolean;
+  candidates?: TeacherPortraitCandidate[];
+  error?: string;
+};
+
+export const adminGetTeacherPortraitSummary = () =>
+  adminRequest<{ categories: TeacherPortraitCategorySummary[] }>("/api/admin/teacher-portraits/summary");
+
+export const adminGetTeacherPortraits = (opts: {
+  kind: string;
+  photo: string;
+  status?: string;
+  q?: string;
+  page?: number;
+  pageSize?: number | "all";
+}) => {
+  const params = new URLSearchParams();
+  params.set("kind", opts.kind);
+  params.set("photo", opts.photo);
+  if (opts.status) params.set("status", opts.status);
+  if (opts.q) params.set("q", opts.q);
+  if (opts.page) params.set("page", String(opts.page));
+  if (opts.pageSize) params.set("pageSize", String(opts.pageSize));
+  return adminRequest<{
+    items: TeacherPortraitListItem[];
+    total: number;
+    page: number;
+    pageSize: number;
+    kind: string;
+    photo: string;
+  }>(`/api/admin/teacher-portraits?${params.toString()}`);
+};
+
+export const adminGetTeacherPortraitPhones = (opts: {
+  kind: string;
+  photo: string;
+  status?: string;
+  q?: string;
+}) => {
+  const params = new URLSearchParams();
+  params.set("kind", opts.kind);
+  params.set("photo", opts.photo);
+  params.set("ids_only", "1");
+  if (opts.status) params.set("status", opts.status);
+  if (opts.q) params.set("q", opts.q);
+  return adminRequest<{ phones: string[]; total: number }>(`/api/admin/teacher-portraits?${params.toString()}`);
+};
+
+export const adminGenerateTeacherPortrait = (payload: {
+  phone: string;
+  regenerate?: boolean;
+  source_nomination_id?: string;
+}) =>
+  adminRequest<TeacherPortraitGenerateResult>("/api/admin/teacher-portraits/generate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const adminRegenerateTeacherPortrait = (phone: string, source_nomination_id?: string) =>
+  adminRequest<TeacherPortraitGenerateResult>(
+    `/api/admin/teacher-portraits/${encodeURIComponent(phone)}/regenerate`,
+    {
+      method: "POST",
+      body: JSON.stringify(source_nomination_id ? { source_nomination_id } : {}),
+    }
+  );
