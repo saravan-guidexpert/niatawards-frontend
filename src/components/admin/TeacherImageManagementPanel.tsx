@@ -708,13 +708,15 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
       </div>
 
       {blockedReason ? (
-        <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 flex items-start gap-3">
-          <AlertTriangle className="w-4 h-4 text-red-300 mt-0.5 shrink-0" />
+        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-300 mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-red-200">
-              {isVideos ? "Video generation is blocked" : "Photo generation is blocked"}
+            <p className="text-sm font-semibold text-amber-200">
+              {isVideos ? "This server does not render videos" : "Photo generation is blocked"}
             </p>
-            <p className="text-xs text-red-200/70 mt-0.5">{blockedReason}</p>
+            <p className="text-xs text-amber-200/70 mt-0.5">
+              {isVideos ? `Queued videos wait for the render host. ${blockedReason}` : blockedReason}
+            </p>
           </div>
         </div>
       ) : null}

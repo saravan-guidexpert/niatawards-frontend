@@ -657,6 +657,7 @@ export const adminRegenerateTeacherPortrait = (phone: string, source_nomination_
 export type GenerationReadiness = {
   video_ready: boolean;
   video_error: string | null;
+  renders_here: boolean;
   portrait_ready: boolean;
   portrait_error: string | null;
 };
