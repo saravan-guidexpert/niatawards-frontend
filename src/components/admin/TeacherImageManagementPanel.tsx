@@ -3,8 +3,9 @@ import { motion } from "framer-motion";
 import {
   AlertTriangle,
   CheckCircle2,
+  Clapperboard,
   Clock,
-  Image as ImageIcon,
+  Images,
   Loader2,
   Search,
   Sparkles,
@@ -17,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cloudinaryDisplayUrl } from "@/lib/cloudinaryUrl";
+import { API_URL } from "@/lib/apiBase";
 import {
   IMAGE_MANAGEMENT_CATEGORIES,
   type ImageManagementCategoryId,
@@ -24,16 +26,23 @@ import {
   type PortraitAdminStatus,
 } from "@/lib/nominationKind";
 import {
+  adminEstimateVideoGeneration,
   adminGenerateTeacherPortrait,
   adminGetTeacherPortraitPhones,
   adminGetTeacherPortraitSummary,
   adminGetTeacherPortraits,
+  adminGetVideoGenerationJobs,
   adminRegenerateTeacherPortrait,
+  adminStartVideoGeneration,
+  adminGetTeacherVideoPreview,
   type TeacherPortraitCategorySummary,
   type TeacherPortraitGenerateResult,
   type TeacherPortraitKindSummary,
   type TeacherPortraitListItem,
+  type VideoGenerationEstimate,
+  type VideoGenerationJobView,
 } from "@/lib/apiAdmin";
+import VideoGenerationJobPanel from "@/components/admin/VideoGenerationJobPanel";
 
 const CHECKERBOARD = {
   backgroundColor: "#ececec",
@@ -52,6 +61,15 @@ const STATUS_LABEL: Record<PortraitAdminStatus, string> = {
   NO_PHOTO: "No photo",
 };
 
+const VIDEO_STATUS_LABEL = {
+  generated: "Generated",
+  not_generated: "Not generated",
+  processing: "Processing",
+  failed: "Failed",
+} as const;
+
+type VideoStatusFilter = keyof typeof VIDEO_STATUS_LABEL;
+
 const STATUS_CHIP: Record<PortraitAdminStatus, string> = {
   NOT_GENERATED: "bg-white/10 text-white/70 border-white/15",
   GENERATING: "bg-sky-500/15 text-sky-300 border-sky-500/25",
@@ -59,6 +77,14 @@ const STATUS_CHIP: Record<PortraitAdminStatus, string> = {
   NEEDS_REVIEW: "bg-amber-500/15 text-amber-300 border-amber-500/25",
   FAILED: "bg-red-500/15 text-red-300 border-red-500/25",
   NO_PHOTO: "bg-white/10 text-white/50 border-white/15",
+};
+
+const VIDEO_STATUS_CHIP: Record<VideoStatusFilter | "blocked", string> = {
+  generated: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+  not_generated: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+  processing: "bg-sky-500/15 text-sky-300 border-sky-500/25",
+  failed: "bg-red-500/15 text-red-300 border-red-500/25",
+  blocked: "bg-white/10 text-white/55 border-white/15",
 };
 
 const GROUPS = [
@@ -112,8 +138,12 @@ const runPool = async <T,>(items: T[], limit: number, fn: (item: T) => Promise<v
   await Promise.all(workers);
 };
 
-const TeacherImageManagementPanel = () => {
+type PanelMode = "images" | "videos";
+
+const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   const { toast } = useToast();
+  const isImages = mode === "images";
+  const isVideos = mode === "videos";
   const [summary, setSummary] = useState<TeacherPortraitCategorySummary[]>([]);
   const [kinds, setKinds] = useState<TeacherPortraitKindSummary[]>([]);
   const [categoryId, setCategoryId] = useState<ImageManagementCategoryId>("student_with_photo");
@@ -130,6 +160,20 @@ const TeacherImageManagementPanel = () => {
   const [batch, setBatch] = useState<BatchRow[]>([]);
   const [runTitle, setRunTitle] = useState("Generate finalized images");
   const stopRef = useRef(false);
+  const [videoJob, setVideoJob] = useState<VideoGenerationJobView | null>(null);
+  const [jobHistory, setJobHistory] = useState<VideoGenerationJobView[]>([]);
+  const [confirm, setConfirm] = useState<VideoGenerationEstimate | null>(null);
+  const [confirmPhones, setConfirmPhones] = useState<string[]>([]);
+  const [confirmMode, setConfirmMode] = useState<"generate" | "regenerate">("generate");
+  const [estimating, setEstimating] = useState(false);
+  const [preview, setPreview] = useState<{
+    title: string;
+    image?: string | null;
+    template?: string | null;
+    icon?: string | null;
+  } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [chosenSource, setChosenSource] = useState<Record<string, string>>({});
 
   const category = IMAGE_MANAGEMENT_CATEGORIES.find((c) => c.id === categoryId) || IMAGE_MANAGEMENT_CATEGORIES[0];
   const withPhoto = category.photo === "with_photo";
@@ -145,19 +189,32 @@ const TeacherImageManagementPanel = () => {
   const pct = jobCounts.total ? Math.round((processed / jobCounts.total) * 100) : 0;
   const nowGenerating = batch.find((row) => row.status === "generating");
 
+  const loadJobs = useCallback(async () => {
+    try {
+      const data = await adminGetVideoGenerationJobs();
+      const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+      setJobHistory(jobs);
+      const running = jobs.find((job) => job.status === "running");
+      if (running) setVideoJob((prev) => (prev?.job_id === running.job_id ? prev : running));
+    } catch {
+      /* history is secondary */
+    }
+  }, []);
+
   const loadSummary = useCallback(async () => {
     const data = await adminGetTeacherPortraitSummary();
     setSummary(Array.isArray(data.categories) ? data.categories : []);
     setKinds(Array.isArray(data.kinds) ? data.kinds : []);
   }, []);
 
-  const loadList = useCallback(async () => {
-    setLoading(true);
+  const loadList = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const data = await adminGetTeacherPortraits({
         kind: category.kind,
         photo: category.photo,
-        status: statusFilter === "all" ? undefined : statusFilter,
+        status: isImages && statusFilter !== "all" ? statusFilter : undefined,
+        video_status: isVideos && statusFilter !== "all" ? statusFilter : undefined,
         q: search.trim() || undefined,
         page,
       });
@@ -171,25 +228,54 @@ const TeacherImageManagementPanel = () => {
         return merged;
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to load teacher images";
-      toast({ title: "Failed to load", description: message, variant: "destructive" });
+      if (!quiet) {
+        const message = err instanceof Error ? err.message : "Failed to load teacher images";
+        toast({ title: "Failed to load", description: message, variant: "destructive" });
+      }
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
-  }, [category.kind, category.photo, statusFilter, search, page, toast]);
+  }, [category.kind, category.photo, statusFilter, search, page, toast, isImages, isVideos]);
 
   useEffect(() => {
     void loadSummary();
-  }, [loadSummary]);
+    if (isVideos) void loadJobs();
+  }, [loadSummary, loadJobs, isVideos]);
 
   useEffect(() => {
     void loadList();
   }, [loadList]);
 
   useEffect(() => {
+    if (videoJob?.status !== "running") return;
+    const timer = window.setInterval(() => {
+      void loadSummary();
+      void loadList(true);
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [videoJob?.status, loadSummary, loadList]);
+
+  useEffect(() => {
     setPage(1);
     setSelected(new Set());
   }, [categoryId, statusFilter, search]);
+
+  useEffect(() => {
+    setChosenSource((prev) => {
+      const next = { ...prev };
+      for (const row of items) {
+        if (next[row.phone]) continue;
+        if (row.source_nomination_id) next[row.phone] = row.source_nomination_id;
+        else if (row.candidates[0]?.id) next[row.phone] = row.candidates[0].id;
+      }
+      return next;
+    });
+  }, [items]);
+
+  const sourceFor = (phone: string) => {
+    const row = items.find((item) => item.phone === phone);
+    return chosenSource[phone] || row?.source_nomination_id || row?.candidates[0]?.id || undefined;
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
   const pagePhones = items.map((row) => row.phone);
@@ -229,7 +315,8 @@ const TeacherImageManagementPanel = () => {
       const data = await adminGetTeacherPortraitPhones({
         kind: category.kind,
         photo: category.photo,
-        status: statusFilter === "all" ? undefined : statusFilter,
+        status: isImages && statusFilter !== "all" ? statusFilter : undefined,
+        video_status: isVideos && statusFilter !== "all" ? statusFilter : undefined,
         q: search.trim() || undefined,
       });
       const teachers = data.teachers || (data.phones || []).map((phone) => ({ phone, name: phone }));
@@ -289,9 +376,9 @@ const TeacherImageManagementPanel = () => {
     );
   };
 
-  const runSelected = async (regenerate: boolean) => {
+  const runSelected = async (regenerate: boolean, phonesArg?: string[]) => {
     if (!withPhoto || busy) return;
-    const phones = [...selected];
+    const phones = phonesArg || [...selected];
     if (!phones.length) {
       toast({ title: "Select teachers first", description: "Choose one or more teachers to generate with OpenAI." });
       return;
@@ -334,9 +421,10 @@ const TeacherImageManagementPanel = () => {
           prev.map((row) => (row.phone === phone ? { ...row, portrait_status: "GENERATING" } : row))
         );
         try {
+          const source_nomination_id = sourceFor(phone);
           const result = regenerate
-            ? await adminRegenerateTeacherPortrait(phone)
-            : await adminGenerateTeacherPortrait({ phone, regenerate: false });
+            ? await adminRegenerateTeacherPortrait(phone, source_nomination_id)
+            : await adminGenerateTeacherPortrait({ phone, regenerate: false, source_nomination_id });
           applyResult(phone, result);
           if (result.ok && !result.skipped) {
             patchBatch(phone, { status: "generated", detail: "Finalized portrait saved" });
@@ -373,6 +461,135 @@ const TeacherImageManagementPanel = () => {
     }
   };
 
+  const openVideoConfirm = async (regenerate: boolean) => {
+    const phones = [...selected];
+    if (!phones.length) {
+      toast({ title: "Select teachers first", description: "Choose teachers, then generate nomination videos." });
+      return;
+    }
+    setEstimating(true);
+    try {
+      const estimate = await adminEstimateVideoGeneration({
+        phones,
+        kind: category.kind,
+        photo: category.photo,
+        regenerate,
+      });
+      setConfirmMode(regenerate ? "regenerate" : "generate");
+      setConfirmPhones(phones);
+      setConfirm(estimate);
+    } catch (err: unknown) {
+      toast({
+        title: "Could not estimate videos",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    } finally {
+      setEstimating(false);
+    }
+  };
+
+  const startVideos = async () => {
+    if (!confirm) return;
+    const phones = confirmPhones.length ? confirmPhones : [...selected];
+    try {
+      const data = await adminStartVideoGeneration({
+        phones,
+        kind: category.kind,
+        photo: category.photo,
+        regenerate: confirmMode === "regenerate",
+      });
+      setConfirm(null);
+      setVideoJob(data.job);
+      await loadJobs();
+      toast({
+        title: `${data.queued_videos.toLocaleString("en-IN")} videos queued`,
+        description: `Not ${data.teachers} teachers — one video per nomination.`,
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Could not start generation",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const generateOneImage = async (phone: string) => {
+    if (busy) return;
+    const sourceId = sourceFor(phone);
+    const row = items.find((item) => item.phone === phone);
+    if (row?.portrait_status === "NEEDS_REVIEW" && !sourceId) {
+      toast({
+        title: "Pick a source photo",
+        description: "Select one of the photos, then generate. That choice is saved so this conflict will not come back.",
+      });
+      return;
+    }
+    if (sourceId) {
+      await generateFromCandidate(phone, sourceId);
+      return;
+    }
+    await runSelected(false, [phone]);
+  };
+
+  const generateOneTeacherVideos = async (phone: string, regenerate = false) => {
+    setEstimating(true);
+    try {
+      const estimate = await adminEstimateVideoGeneration({
+        phones: [phone],
+        kind: category.kind,
+        photo: category.photo,
+        regenerate,
+      });
+      setConfirmMode(regenerate ? "regenerate" : "generate");
+      setConfirmPhones([phone]);
+      setConfirm(estimate);
+    } catch (err: unknown) {
+      toast({
+        title: "Could not estimate videos",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    } finally {
+      setEstimating(false);
+    }
+  };
+
+  const openPreview = async (row: TeacherPortraitListItem, kind: "image" | "template") => {
+    if (kind === "image") {
+      setPreview({ title: `${row.name} — finalized image`, image: row.cropped_cloudinary_url });
+      return;
+    }
+    setPreviewLoading(true);
+    setPreview({ title: `${row.name} — template preview` });
+    try {
+      const data = await adminGetTeacherVideoPreview({
+        phone: row.phone,
+        kind: category.kind,
+        photo: category.photo,
+      });
+      const template = data.template_preview_url
+        ? `${API_URL}${data.template_preview_url.startsWith("/") ? "" : "/"}${data.template_preview_url}`
+        : null;
+      setPreview({
+        title: `${row.name} — template preview`,
+        image: data.image_url,
+        template,
+        icon: data.category_icon_label,
+      });
+    } catch (err: unknown) {
+      setPreview(null);
+      toast({
+        title: "Preview failed",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const generateFromCandidate = async (phone: string, sourceNominationId: string) => {
     if (busy) return;
     const name = nameByPhone[phone] || items.find((row) => row.phone === phone)?.name || phone;
@@ -380,6 +597,7 @@ const TeacherImageManagementPanel = () => {
     setRunTitle("Generating with OpenAI");
     setBatch([{ phone, name, status: "generating", detail: "Calling OpenAI gpt-image-2" }]);
     setBusy(true);
+    setChosenSource((prev) => ({ ...prev, [phone]: sourceNominationId }));
     try {
       const result = await adminGenerateTeacherPortrait({
         phone,
@@ -389,8 +607,13 @@ const TeacherImageManagementPanel = () => {
       applyResult(phone, result);
       if (result.ok && !result.skipped) patchBatch(phone, { status: "generated", detail: "Finalized portrait saved" });
       else if (result.needs_review) patchBatch(phone, { status: "needs_review", detail: result.reason || "Still needs review" });
+      else if (result.ok && result.skipped && result.reason === "generating") {
+        patchBatch(phone, { status: "generating", detail: "Already generating" });
+        toast({ title: "Already generating", description: "Wait for the current OpenAI job, then retry if it stays stuck." });
+      }
       else if (!result.ok) patchBatch(phone, { status: "failed", detail: result.error || "OpenAI generation failed" });
       await loadSummary();
+      await loadList(true);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Request failed";
       patchBatch(phone, { status: "failed", detail: message });
@@ -402,43 +625,79 @@ const TeacherImageManagementPanel = () => {
 
   const activeSummary = summaryFor.get(categoryId);
   const statusCounts = activeSummary?.status || emptyStatus();
+  const videoTeacherCounts = activeSummary?.videos?.teachers || {
+    generated: 0,
+    not_generated: 0,
+    processing: 0,
+    failed: 0,
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
           <h2 className="font-heading text-xl sm:text-2xl font-bold text-primary-foreground flex items-center gap-2">
-            <ImageIcon className="w-5 h-5 text-secondary" />
-            Teacher Image Management
+            {isVideos ? (
+              <Clapperboard className="w-5 h-5 text-secondary" />
+            ) : (
+              <Images className="w-5 h-5 text-secondary" />
+            )}
+            {isVideos ? "Teacher Video Production" : "Teacher Photo Management"}
           </h2>
           <p className="text-sm text-primary-foreground/50 mt-1 max-w-2xl">
-            Unique teachers by nomination kind. Generate calls OpenAI, crops the canvas, and stores one reusable
-            finalized portrait per phone.
+            {isVideos
+              ? "Select teachers with finalized images and queue one video per eligible nomination. Image generation lives in Teacher Photo Management. Messages are never sent from here."
+              : "Image is teacher-level. Generate and review one finalized portrait per unique teacher. Video generation lives in Video Production. Messages are never sent from here."}
           </p>
         </div>
-        {withPhoto ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              className="h-10 px-4 bg-secondary text-[#1a0505] font-semibold hover:bg-secondary/90"
-              disabled={busy || selected.size === 0}
-              onClick={() => void runSelected(false)}
-            >
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              Generate with OpenAI
-              {selected.size ? ` (${selected.size})` : ""}
-            </Button>
-            <Button
-              variant="hero-outline"
-              size="sm"
-              className="text-xs h-10"
-              disabled={busy || selected.size === 0}
-              onClick={() => void runSelected(true)}
-            >
-              Regenerate selected
-            </Button>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {isImages && withPhoto ? (
+            <>
+              <Button
+                size="sm"
+                className="h-10 px-4 bg-secondary text-[#1a0505] font-semibold hover:bg-secondary/90"
+                disabled={busy || selected.size === 0}
+                onClick={() => void runSelected(false)}
+              >
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                Generate finalized images
+                {selected.size ? ` (${selected.size})` : ""}
+              </Button>
+              <Button
+                variant="hero-outline"
+                size="sm"
+                className="text-xs h-10"
+                disabled={busy || selected.size === 0}
+                onClick={() => void runSelected(true)}
+              >
+                Regenerate images
+              </Button>
+            </>
+          ) : null}
+          {isVideos ? (
+            <>
+              <Button
+                size="sm"
+                className="h-10 px-4 bg-secondary text-[#1a0505] font-semibold hover:bg-secondary/90"
+                disabled={estimating || selected.size === 0}
+                onClick={() => void openVideoConfirm(false)}
+              >
+                {estimating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clapperboard className="w-4 h-4" />}
+                Generate videos
+                {selected.size ? ` (${selected.size})` : ""}
+              </Button>
+              <Button
+                variant="hero-outline"
+                size="sm"
+                className="text-xs h-10"
+                disabled={estimating || selected.size === 0}
+                onClick={() => void openVideoConfirm(true)}
+              >
+                Regenerate videos
+              </Button>
+            </>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-3">
@@ -485,12 +744,26 @@ const TeacherImageManagementPanel = () => {
                     <p className="text-[10px] text-white/40 mt-1">
                       unique · {(row?.nominations ?? 0).toLocaleString("en-IN")} nominations
                     </p>
-                    {row && cat.photo === "with_photo" ? (
-                      <p className="text-[10px] text-white/35 mt-0.5">
-                        {row.status.GENERATED} done · {row.status.NOT_GENERATED} waiting
-                      </p>
+                    {isVideos ? (
+                      <>
+                        <p className="text-[10px] text-emerald-300/80 mt-0.5">
+                          Generated {(row?.videos?.generated ?? 0).toLocaleString("en-IN")}
+                        </p>
+                        <p className="text-[10px] text-amber-300/80">
+                          Not generated {(row?.videos?.not_generated ?? Math.max(0, (row?.videos?.total ?? row?.nominations ?? 0) - (row?.videos?.generated ?? 0))).toLocaleString("en-IN")}
+                        </p>
+                        {(row?.videos?.processing || row?.videos?.failed) ? (
+                          <p className="text-[10px] text-white/35">
+                            {row?.videos?.processing ? `${row.videos.processing} processing` : ""}
+                            {row?.videos?.processing && row?.videos?.failed ? " · " : ""}
+                            {row?.videos?.failed ? `${row.videos.failed} failed` : ""}
+                          </p>
+                        ) : null}
+                      </>
                     ) : (
-                      <p className="text-[10px] text-white/35 mt-0.5">No generate action</p>
+                      <p className="text-[10px] text-white/35 mt-0.5">
+                        Images {(row?.images_finalized ?? row?.status?.GENERATED ?? 0).toLocaleString("en-IN")} / {(row?.unique_teachers ?? 0).toLocaleString("en-IN")}
+                      </p>
                     )}
                   </button>
                 );
@@ -501,7 +774,82 @@ const TeacherImageManagementPanel = () => {
         })}
       </div>
 
-      {batch.length > 0 ? (
+      {isVideos && selected.size > 0 ? (
+        <div className="rounded-xl border border-secondary/25 bg-secondary/10 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-white/80">
+            Selected teachers: <span className="font-heading font-bold text-white">{selected.size}</span>
+          </p>
+          <Button
+            size="sm"
+            className="h-9 bg-secondary text-[#1a0505] font-semibold"
+            disabled={estimating}
+            onClick={() => void openVideoConfirm(false)}
+          >
+            {estimating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clapperboard className="w-4 h-4" />}
+            Generate videos
+          </Button>
+        </div>
+      ) : null}
+
+      {isImages && selected.size > 0 && withPhoto ? (
+        <div className="rounded-xl border border-secondary/25 bg-secondary/10 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-white/80">
+            Selected teachers: <span className="font-heading font-bold text-white">{selected.size}</span>
+          </p>
+          <Button
+            size="sm"
+            className="h-9 bg-secondary text-[#1a0505] font-semibold"
+            disabled={busy}
+            onClick={() => void runSelected(false)}
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Generate finalized images
+          </Button>
+        </div>
+      ) : null}
+
+      {isVideos && videoJob ? (
+        <VideoGenerationJobPanel
+          job={videoJob}
+          onJobChange={(next) => {
+            setVideoJob(next);
+            if (next.status !== "running") {
+              void loadSummary();
+              void loadList();
+              void loadJobs();
+            }
+          }}
+          onClose={() => setVideoJob(null)}
+        />
+      ) : null}
+
+      {isVideos && jobHistory.length > 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">Generation jobs</p>
+          {jobHistory.slice(0, 8).map((job) => (
+            <button
+              key={job.job_id}
+              type="button"
+              onClick={() => setVideoJob(job)}
+              className="w-full text-left rounded-xl border border-white/10 bg-black/20 px-3 py-2 hover:border-white/25"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-white font-semibold">
+                  Job #{job.job_number} · {job.total.toLocaleString("en-IN")} videos
+                </p>
+                <p className="text-[11px] text-white/50 capitalize">{job.status}</p>
+              </div>
+              <p className="text-[11px] text-white/45 mt-0.5">
+                {job.completed} completed · {job.failed} failed
+                {job.cancelled ? ` · ${job.cancelled} cancelled` : ""}
+                {job.duration_ms ? ` · ${Math.round(job.duration_ms / 60000)}m` : ""}
+              </p>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {isImages && batch.length > 0 ? (
         <div className="rounded-2xl border border-secondary/30 bg-secondary/10 overflow-hidden">
           <div className="p-4 sm:p-5 space-y-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -594,7 +942,11 @@ const TeacherImageManagementPanel = () => {
               </p>
             </div>
             {!withPhoto ? (
-              <p className="text-xs text-white/40">Without-photo teachers stay on the no-photo plate. Generate is not used here.</p>
+              <p className="text-xs text-white/40">
+                {isVideos
+                  ? "No finalized image required. Videos use the approved no-photo template."
+                  : "No photo in this category. Finalized portraits are not needed here."}
+              </p>
             ) : null}
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
@@ -608,38 +960,50 @@ const TeacherImageManagementPanel = () => {
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[200px] bg-white/5 border-white/10 text-white text-xs h-9">
+              <SelectTrigger className="w-full sm:w-[220px] bg-white/5 border-white/10 text-white text-xs h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                {(Object.keys(STATUS_LABEL) as PortraitAdminStatus[])
-                  .filter((status) => withPhoto || status === "NO_PHOTO")
-                  .map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {STATUS_LABEL[status]}
-                      {statusCounts[status] ? ` (${statusCounts[status]})` : ""}
-                    </SelectItem>
-                  ))}
+                {isVideos ? (
+                  <>
+                    <SelectItem value="all">All videos</SelectItem>
+                    {(Object.keys(VIDEO_STATUS_LABEL) as VideoStatusFilter[]).map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {VIDEO_STATUS_LABEL[status]}
+                        {videoTeacherCounts[status] ? ` (${videoTeacherCounts[status]})` : ""}
+                      </SelectItem>
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    {(Object.keys(STATUS_LABEL) as PortraitAdminStatus[])
+                      .filter((status) => withPhoto || status === "NO_PHOTO")
+                      .map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {STATUS_LABEL[status]}
+                          {statusCounts[status] ? ` (${statusCounts[status]})` : ""}
+                        </SelectItem>
+                      ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
-          {withPhoto ? (
-            <div className="flex flex-wrap items-center gap-3 text-xs text-white/55">
-              <label className="inline-flex items-center gap-2">
-                <Checkbox checked={allPageSelected} onCheckedChange={(on) => togglePage(Boolean(on))} />
-                Select this page
-              </label>
-              <button type="button" className="font-semibold text-secondary hover:text-secondary/80" onClick={() => void selectAllMatching()}>
-                Select all matching ({total.toLocaleString("en-IN")})
+          <div className="flex flex-wrap items-center gap-3 text-xs text-white/55">
+            <label className="inline-flex items-center gap-2">
+              <Checkbox checked={allPageSelected} onCheckedChange={(on) => togglePage(Boolean(on))} />
+              Select this page
+            </label>
+            <button type="button" className="font-semibold text-secondary hover:text-secondary/80" onClick={() => void selectAllMatching()}>
+              Select all matching ({total.toLocaleString("en-IN")})
+            </button>
+            {selected.size > 0 ? (
+              <button type="button" className="hover:text-white" onClick={() => setSelected(new Set())}>
+                Clear
               </button>
-              {selected.size > 0 ? (
-                <button type="button" className="hover:text-white" onClick={() => setSelected(new Set())}>
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </div>
 
         {loading ? (
@@ -654,6 +1018,9 @@ const TeacherImageManagementPanel = () => {
             {items.map((row, i) => {
               const live = batch.find((job) => job.phone === row.phone);
               const generating = live?.status === "generating" || row.portrait_status === "GENERATING";
+              const videos = row.videos || { generated: 0, pending: 0, processing: 0, failed: 0, total: row.nomination_count };
+              const imageReady = !withPhoto || row.portrait_status === "GENERATED";
+              const remaining = Math.max(0, videos.total - videos.generated);
               return (
                 <motion.div
                   key={row.phone}
@@ -669,14 +1036,12 @@ const TeacherImageManagementPanel = () => {
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    {withPhoto ? (
-                      <Checkbox
-                        checked={selected.has(row.phone)}
-                        onCheckedChange={(on) => togglePhone(row.phone, Boolean(on), row.name)}
-                        className="mt-1"
-                        disabled={busy}
-                      />
-                    ) : null}
+                    <Checkbox
+                      checked={selected.has(row.phone)}
+                      onCheckedChange={(on) => togglePhone(row.phone, Boolean(on), row.name)}
+                      className="mt-1"
+                      disabled={busy}
+                    />
                     <div
                       className="relative w-[88px] h-[156px] rounded-lg overflow-hidden border border-white/10 flex-shrink-0"
                       style={row.cropped_cloudinary_url ? CHECKERBOARD : { background: "rgba(255,255,255,0.04)" }}
@@ -686,10 +1051,11 @@ const TeacherImageManagementPanel = () => {
                           src={cloudinaryDisplayUrl(row.cropped_cloudinary_url, { width: 240, height: 426, crop: "fit" })}
                           alt={row.name}
                           className="absolute inset-0 h-full w-full object-contain"
+                          loading="lazy"
                         />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white/35 text-center px-2">
-                          {withPhoto ? "Awaiting OpenAI" : "No photo"}
+                          {withPhoto ? "Awaiting finalized image" : "No photo template"}
                         </div>
                       )}
                       {generating ? (
@@ -702,46 +1068,124 @@ const TeacherImageManagementPanel = () => {
                     <div className="min-w-0 flex-1">
                       <p className="font-heading font-bold text-white truncate">{row.name || "Unnamed teacher"}</p>
                       <p className="text-xs text-white/50">{row.phone}</p>
-                      <p className="text-[11px] text-white/40 mt-1">
-                        {row.nomination_count} nomination{row.nomination_count !== 1 ? "s" : ""} in this category
-                      </p>
-                      <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_CHIP[row.portrait_status]}`}>
-                        {STATUS_LABEL[row.portrait_status]}
-                      </span>
+                      <p className="text-[11px] text-white/45 mt-1">{category.group}</p>
+                      <p className="text-[11px] text-white/45">{category.photoLabel}</p>
+                      <p className="text-[11px] text-white/40 mt-1">Nominations: {row.nomination_count}</p>
+                      {isVideos ? (
+                        <>
+                          <p className="text-[11px] text-emerald-300/90 mt-2">
+                            Generated: {videos.generated.toLocaleString("en-IN")}
+                          </p>
+                          <p className="text-[11px] text-amber-300/90">
+                            Not generated: {Math.max(0, videos.total - videos.generated).toLocaleString("en-IN")}
+                            {videos.processing ? ` · ${videos.processing} processing` : ""}
+                            {videos.failed ? ` · ${videos.failed} failed` : ""}
+                          </p>
+                          {!imageReady ? (
+                            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${VIDEO_STATUS_CHIP.blocked}`}>
+                              Blocked · no finalized image
+                            </span>
+                          ) : videos.processing > 0 ? (
+                            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${VIDEO_STATUS_CHIP.processing}`}>
+                              Processing
+                            </span>
+                          ) : videos.failed > 0 ? (
+                            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${VIDEO_STATUS_CHIP.failed}`}>
+                              Failed
+                            </span>
+                          ) : videos.generated === videos.total && videos.total > 0 ? (
+                            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${VIDEO_STATUS_CHIP.generated}`}>
+                              VIDEO ✓ GENERATED
+                            </span>
+                          ) : (
+                            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${VIDEO_STATUS_CHIP.not_generated}`}>
+                              Not generated
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[11px] text-white/70 mt-2">
+                            Finalized image: {imageReady ? "✓ READY" : STATUS_LABEL[row.portrait_status]}
+                          </p>
+                          <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_CHIP[row.portrait_status]}`}>
+                            {STATUS_LABEL[row.portrait_status]}
+                          </span>
+                        </>
+                      )}
                       {live ? (
                         <p className="text-[11px] text-white/55 mt-1">{live.detail || JOB_LABEL[live.status]}</p>
                       ) : null}
                     </div>
                   </div>
-                  <div className="text-[11px] text-white/45 space-y-0.5">
-                    <p>Last generated: {formatWhen(row.finalized_at || row.generated_at)}</p>
-                    {row.portrait_error ? (
-                      <p className="text-amber-300 flex items-start gap-1">
-                        <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                        {row.portrait_error}
-                      </p>
+                  <div className="flex flex-wrap gap-2">
+                    {row.cropped_cloudinary_url ? (
+                      <Button variant="hero-outline" size="sm" className="text-[11px] h-8" onClick={() => void openPreview(row, "image")}>
+                        View image
+                      </Button>
+                    ) : null}
+                    {isVideos && imageReady ? (
+                      <Button variant="hero-outline" size="sm" className="text-[11px] h-8" onClick={() => void openPreview(row, "template")}>
+                        View template
+                      </Button>
+                    ) : null}
+                    {isImages && withPhoto && (row.can_generate_image || row.portrait_status === "NEEDS_REVIEW" || row.portrait_status === "FAILED") ? (
+                      <Button
+                        size="sm"
+                        className="text-[11px] h-8 bg-secondary text-[#1a0505] font-semibold"
+                        disabled={busy}
+                        onClick={() => void generateOneImage(row.phone)}
+                      >
+                        {row.portrait_status === "FAILED" ? "Retry generate" : "Generate finalized image"}
+                      </Button>
+                    ) : null}
+                    {isVideos && imageReady && remaining > 0 ? (
+                      <Button size="sm" className="text-[11px] h-8 bg-secondary text-[#1a0505] font-semibold" disabled={estimating} onClick={() => void generateOneTeacherVideos(row.phone)}>
+                        Generate remaining videos
+                      </Button>
+                    ) : null}
+                    {isVideos && imageReady && remaining === 0 && videos.total > 0 ? (
+                      <Button variant="hero-outline" size="sm" className="text-[11px] h-8" disabled={estimating} onClick={() => void generateOneTeacherVideos(row.phone, true)}>
+                        Regenerate videos
+                      </Button>
                     ) : null}
                   </div>
-                  {row.portrait_status === "NEEDS_REVIEW" && row.candidates.length > 0 ? (
+                  {row.portrait_error ? (
+                    <p className="text-[11px] text-amber-300 flex items-start gap-1">
+                      <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      {row.portrait_error}
+                    </p>
+                  ) : null}
+                  {isImages && row.portrait_status === "NEEDS_REVIEW" && row.candidates.length > 0 ? (
                     <div className="space-y-2">
-                      <p className="text-[10px] uppercase tracking-wider text-white/40">Pick a source photo to send to OpenAI</p>
+                      <p className="text-[10px] uppercase tracking-wider text-white/40">
+                        Select one photo, then generate. That choice is saved so this conflict will not return.
+                      </p>
                       <div className="grid grid-cols-3 gap-2">
-                        {row.candidates.map((candidate) => (
+                        {row.candidates.map((candidate) => {
+                          const picked = (chosenSource[row.phone] || row.candidates[0]?.id) === candidate.id;
+                          return (
                           <button
                             key={candidate.id}
                             type="button"
                             disabled={busy}
-                            onClick={() => void generateFromCandidate(row.phone, candidate.id)}
-                            className="rounded-lg border border-white/10 overflow-hidden hover:border-secondary/50"
+                            onClick={() => setChosenSource((prev) => ({ ...prev, [row.phone]: candidate.id }))}
+                            className={`rounded-lg border overflow-hidden ${
+                              picked ? "border-secondary ring-2 ring-secondary/60" : "border-white/10 hover:border-secondary/50"
+                            }`}
                             title={`Use photo from ${candidate.teacher_name || candidate.id}`}
                           >
                             <img
                               src={cloudinaryDisplayUrl(candidate.photo_url, { width: 160, height: 160, crop: "fill" })}
                               alt={candidate.teacher_name}
                               className="w-full h-16 object-cover"
+                              onError={(e) => {
+                                (e.currentTarget.parentElement as HTMLElement | null)?.setAttribute("hidden", "true");
+                              }}
                             />
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   ) : null}
@@ -777,6 +1221,81 @@ const TeacherImageManagementPanel = () => {
           </div>
         ) : null}
       </div>
+
+      {isVideos && confirm ? (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/15 bg-[#1a0505] p-5 space-y-4">
+            <p className="font-heading font-bold text-white text-lg">
+              {confirmMode === "regenerate" ? "REGENERATE VIDEOS?" : "GENERATE VIDEOS?"}
+            </p>
+            <div className="text-sm text-white/75 space-y-1">
+              <p>Teachers: {confirm.teachers.toLocaleString("en-IN")}</p>
+              <p>Nomination videos: {confirm.eligible_nominations.toLocaleString("en-IN")}</p>
+              <p>Already generated: {confirm.already_generated.toLocaleString("en-IN")}</p>
+              {confirm.blocked_missing_portrait ? (
+                <p className="text-amber-300">Blocked (no finalized image): {confirm.blocked_missing_portrait}</p>
+              ) : null}
+              <p className="text-white font-semibold pt-2">
+                {confirmMode === "regenerate"
+                  ? `${confirm.to_generate.toLocaleString("en-IN")} VIDEOS WILL BE REGENERATED`
+                  : `${confirm.to_generate.toLocaleString("en-IN")} VIDEOS WILL BE GENERATED`}
+              </p>
+              <p>Audio: Attached</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="hero-outline" size="sm" onClick={() => setConfirm(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="bg-secondary text-[#1a0505] font-semibold"
+                disabled={confirm.to_generate <= 0}
+                onClick={() => void startVideos()}
+              >
+                Start generation
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {preview || previewLoading ? (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
+          <div className="w-full max-w-3xl rounded-2xl border border-white/15 bg-[#1a0505] p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <p className="font-heading font-bold text-white">{preview?.title || "Preview"}</p>
+              <button type="button" className="text-xs text-white/50 hover:text-white" onClick={() => setPreview(null)}>
+                Close
+              </button>
+            </div>
+            {previewLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-6 h-6 text-secondary animate-spin" />
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-4">
+                {preview?.image ? (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2">Finalized image</p>
+                    <div className="rounded-xl overflow-hidden border border-white/10" style={CHECKERBOARD}>
+                      <img src={cloudinaryDisplayUrl(preview.image, { width: 540, height: 960, crop: "fit" })} alt="" className="w-full" />
+                    </div>
+                  </div>
+                ) : null}
+                {preview?.template ? (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2">Template preview</p>
+                    <div className="rounded-xl overflow-hidden border border-white/10 bg-black">
+                      <img src={preview.template} alt="" className="w-full" />
+                    </div>
+                    {preview.icon ? <p className="text-[11px] text-white/50 mt-2">Icon: {preview.icon}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

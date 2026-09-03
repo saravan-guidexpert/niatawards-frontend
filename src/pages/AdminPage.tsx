@@ -1305,7 +1305,7 @@ const AdminPage = () => {
           <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
             <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
           </Button>
-          {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && activeTab !== "teacher-images" && activeTab !== "videos" && activeTab !== "offline" && (
+          {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && activeTab !== "teacher-images" && activeTab !== "video-production" && activeTab !== "videos" && activeTab !== "offline" && (
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
               <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span>
             </Button>
@@ -1315,7 +1315,7 @@ const AdminPage = () => {
 
       {/* Content */}
       <div className={`flex-1 py-6 sm:py-8 px-3 sm:px-5 xl:px-8 ${
-        activeTab === "nominations" || activeTab === "teachers" || activeTab === "teacher-images" || activeTab === "videos" || activeTab === "offline"
+        activeTab === "nominations" || activeTab === "teachers" || activeTab === "teacher-images" || activeTab === "video-production" || activeTab === "videos" || activeTab === "offline"
           ? "w-full"
           : "w-full max-w-6xl"
       }`}>
@@ -1326,7 +1326,9 @@ const AdminPage = () => {
         ) : activeTab === "videos" ? (
           <TeacherVideoReviewPanel />
         ) : activeTab === "teacher-images" ? (
-          <TeacherImageManagementPanel />
+          <TeacherImageManagementPanel mode="images" />
+        ) : activeTab === "video-production" ? (
+          <TeacherImageManagementPanel mode="videos" />
         ) : activeTab === "nominations" ? (
           <>
             <FunnelAnalytics

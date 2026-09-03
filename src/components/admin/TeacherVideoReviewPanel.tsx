@@ -160,20 +160,39 @@ const videoPlayerUrl = (item: VideoReviewItem) => {
   return `${base}${base.includes("?") ? "&" : "?"}v=${encodeURIComponent(rid)}`;
 };
 
-const PortraitVideo = ({ url, title }: { url: string; title: string }) => (
-  <div className="mx-auto w-full max-w-[220px] rounded-xl overflow-hidden border border-white/10 bg-black">
-    <div className="relative w-full" style={{ paddingTop: "177.78%" }}>
-      <video
-        className="absolute inset-0 h-full w-full object-contain bg-black"
-        src={url}
-        controls
-        playsInline
-        preload="metadata"
-        title={title}
-      />
+const PAGE_SIZE = 12;
+
+const PortraitVideo = ({ url, title }: { url: string; title: string }) => {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div className="mx-auto w-full max-w-[220px] rounded-xl overflow-hidden border border-white/10 bg-black">
+      <div className="relative w-full" style={{ paddingTop: "177.78%" }}>
+        {playing ? (
+          <video
+            className="absolute inset-0 h-full w-full object-contain bg-black"
+            src={url}
+            controls
+            autoPlay
+            playsInline
+            preload="none"
+            title={title}
+          />
+        ) : (
+          <button
+            type="button"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black text-white/80 hover:text-white"
+            onClick={() => setPlaying(true)}
+          >
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/30 bg-white/10 text-lg">
+              ▶
+            </span>
+            <span className="text-[11px]">Play video</span>
+          </button>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const FrameLabel = ({ children }: { children: string }) => (
   <p className="text-[10px] font-semibold tracking-wide text-primary-foreground/45 mb-1.5 uppercase">{children}</p>
@@ -248,26 +267,30 @@ const TeacherVideoReviewPanel = () => {
   const [counts, setCounts] = useState<VideoReviewCounts>(emptyCounts);
   const [filter, setFilter] = useState<string>("ready_for_review");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<VideoReviewItem | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const data = await adminGetVideoReviews();
       setItems(Array.isArray(data.items) ? data.items : []);
       setCounts({ ...emptyCounts, ...(data.counts || {}) });
     } catch (err: unknown) {
+      if (quiet) return;
       const message = err instanceof Error ? err.message : "Failed to load video reviews";
       toast({ title: "Failed to load", description: message, variant: "destructive" });
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
   useEffect(() => {
     void load();
+    const timer = window.setInterval(() => void load(true), 10000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const visible = useMemo(() => {
@@ -293,6 +316,13 @@ const TeacherVideoReviewPanel = () => {
       return haystack.some((value) => String(value || "").toLowerCase().includes(q));
     });
   }, [items, filter, search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const paged = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const act = async (item: VideoReviewItem, action: "approve" | "reject", reason?: string) => {
     setBusyId(item.nomination_id);
@@ -360,8 +390,8 @@ const TeacherVideoReviewPanel = () => {
               Teacher Video Review
             </h2>
             <p className="text-xs text-primary-foreground/40 mt-1">
-              Submitted nominations classified by kind × source photo. Video generation currently covers student
-              nominations. Approve means the video may be used later for messaging — nothing is sent from this screen.
+              {visible.length.toLocaleString("en-IN")} matching · showing {paged.length} on this page.
+              Videos load only after you click Play.
             </p>
           </div>
           <div className="flex flex-col gap-2">
@@ -397,7 +427,7 @@ const TeacherVideoReviewPanel = () => {
           </div>
         ) : (
           <div className="p-3 sm:p-4 space-y-4">
-            {visible.map((item, i) => {
+            {paged.map((item, i) => {
               const canReview =
                 item.eligible &&
                 Boolean(item.video_url) &&
@@ -465,6 +495,7 @@ const TeacherVideoReviewPanel = () => {
                               src={cloudinaryDisplayUrl(item.teacher_photo_url, { width: 360, crop: "limit" })}
                               alt={`Original photo for nomination ${item.nomination_id}`}
                               className="absolute inset-0 h-full w-full object-contain"
+                              loading="lazy"
                             />
                           ) : null}
                         </StillFrame>
@@ -478,6 +509,7 @@ const TeacherVideoReviewPanel = () => {
                               src={mediaUrl(item.portrait_url) || ""}
                               alt={`Prepared portrait for nomination ${item.nomination_id}`}
                               className="absolute inset-0 h-full w-full object-contain"
+                              loading="lazy"
                             />
                           ) : null}
                         </StillFrame>
@@ -490,6 +522,7 @@ const TeacherVideoReviewPanel = () => {
                               src={mediaUrl(item.portrait_preview_url) || ""}
                               alt={`Template preview for nomination ${item.nomination_id}`}
                               className="absolute inset-0 h-full w-full object-contain bg-[#f6f6f6]"
+                              loading="lazy"
                             />
                           ) : null}
                         </StillFrame>
@@ -552,6 +585,31 @@ const TeacherVideoReviewPanel = () => {
                 </motion.div>
               );
             })}
+            {totalPages > 1 ? (
+              <div className="flex items-center justify-between gap-2 px-1 pt-2 text-xs text-white/50">
+                <span>
+                  Page {page} of {totalPages}
+                </span>
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="font-semibold text-secondary disabled:text-white/25 disabled:pointer-events-none"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="font-semibold text-secondary disabled:text-white/25 disabled:pointer-events-none"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

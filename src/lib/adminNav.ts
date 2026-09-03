@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Clapperboard,
   GraduationCap,
-  Image as ImageIcon,
+  Images,
   MapPin,
   Megaphone,
   MessageCircle,
@@ -12,10 +12,19 @@ import {
 } from "lucide-react";
 import type { PanelPermission } from "./adminSession";
 
-export type AdminTab = PanelPermission | "access" | "teachers" | "teacher-images" | "videos" | "offline";
+export type AdminTab =
+  | PanelPermission
+  | "access"
+  | "teachers"
+  | "teacher-images"
+  | "video-production"
+  | "videos"
+  | "offline";
 
 export const isTabAllowed = (tab: AdminTab, allowed: Array<PanelPermission | "access">) => {
-  if (tab === "teachers" || tab === "videos" || tab === "teacher-images") return allowed.includes("nominations");
+  if (tab === "teachers" || tab === "videos" || tab === "teacher-images" || tab === "video-production") {
+    return allowed.includes("nominations");
+  }
   if (tab === "offline") return allowed.includes("nominations") || allowed.includes("campaigns");
   return allowed.includes(tab);
 };
@@ -40,7 +49,8 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { id: "nominations", label: "Nominations", hint: "All leads and submissions", icon: Users },
       { id: "teachers", label: "Unique Teachers", hint: "One row per teacher phone", icon: GraduationCap },
-      { id: "teacher-images", label: "Teacher Images", hint: "Generate finalized teacher portraits", icon: ImageIcon },
+      { id: "teacher-images", label: "Teacher Photo Management", hint: "Finalized teacher portraits", icon: Images },
+      { id: "video-production", label: "Video Production", hint: "Queue nomination videos", icon: Clapperboard },
       { id: "videos", label: "Teacher Video Review", hint: "Approve generated videos", icon: Clapperboard },
     ],
   },
