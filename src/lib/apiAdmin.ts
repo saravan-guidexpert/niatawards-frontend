@@ -501,7 +501,15 @@ export type TeacherPortraitCategorySummary = {
   group: string;
   photoLabel: string;
   unique_teachers: number;
+  nominations?: number;
   status: Record<PortraitAdminStatus, number>;
+};
+
+export type TeacherPortraitKindSummary = {
+  kind: "student" | "teacher" | "colleague";
+  group: string;
+  nominations: number;
+  unique_teachers: number;
 };
 
 export type TeacherPortraitCandidate = {
@@ -541,7 +549,9 @@ export type TeacherPortraitGenerateResult = {
 };
 
 export const adminGetTeacherPortraitSummary = () =>
-  adminRequest<{ categories: TeacherPortraitCategorySummary[] }>("/api/admin/teacher-portraits/summary");
+  adminRequest<{ categories: TeacherPortraitCategorySummary[]; kinds: TeacherPortraitKindSummary[] }>(
+    "/api/admin/teacher-portraits/summary"
+  );
 
 export const adminGetTeacherPortraits = (opts: {
   kind: string;
@@ -580,8 +590,14 @@ export const adminGetTeacherPortraitPhones = (opts: {
   params.set("ids_only", "1");
   if (opts.status) params.set("status", opts.status);
   if (opts.q) params.set("q", opts.q);
-  return adminRequest<{ phones: string[]; total: number }>(`/api/admin/teacher-portraits?${params.toString()}`);
+  return adminRequest<{
+    phones: string[];
+    teachers: { phone: string; name: string }[];
+    total: number;
+  }>(`/api/admin/teacher-portraits?${params.toString()}`);
 };
+
+const GENERATE_TIMEOUT_MS = 5 * 60 * 1000;
 
 export const adminGenerateTeacherPortrait = (payload: {
   phone: string;
@@ -591,6 +607,7 @@ export const adminGenerateTeacherPortrait = (payload: {
   adminRequest<TeacherPortraitGenerateResult>("/api/admin/teacher-portraits/generate", {
     method: "POST",
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
   });
 
 export const adminRegenerateTeacherPortrait = (phone: string, source_nomination_id?: string) =>
@@ -599,5 +616,6 @@ export const adminRegenerateTeacherPortrait = (phone: string, source_nomination_
     {
       method: "POST",
       body: JSON.stringify(source_nomination_id ? { source_nomination_id } : {}),
+      signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
     }
   );

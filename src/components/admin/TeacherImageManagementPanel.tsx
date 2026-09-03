@@ -1,6 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Image as ImageIcon, Loader2, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Image as ImageIcon,
+  Loader2,
+  Search,
+  Sparkles,
+  Square,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -20,6 +30,8 @@ import {
   adminGetTeacherPortraits,
   adminRegenerateTeacherPortrait,
   type TeacherPortraitCategorySummary,
+  type TeacherPortraitGenerateResult,
+  type TeacherPortraitKindSummary,
   type TeacherPortraitListItem,
 } from "@/lib/apiAdmin";
 
@@ -55,6 +67,24 @@ const GROUPS = [
   { group: "Teacher nominated other teacher", kind: "colleague" as NominationKind },
 ];
 
+type JobState = "queued" | "generating" | "generated" | "failed" | "needs_review" | "skipped";
+
+type BatchRow = {
+  phone: string;
+  name: string;
+  status: JobState;
+  detail?: string;
+};
+
+const JOB_LABEL: Record<JobState, string> = {
+  queued: "In queue",
+  generating: "Calling OpenAI…",
+  generated: "Generated",
+  failed: "Failed",
+  needs_review: "Needs review",
+  skipped: "Skipped",
+};
+
 const emptyStatus = (): Record<PortraitAdminStatus, number> => ({
   NOT_GENERATED: 0,
   GENERATING: 0,
@@ -85,6 +115,7 @@ const runPool = async <T,>(items: T[], limit: number, fn: (item: T) => Promise<v
 const TeacherImageManagementPanel = () => {
   const { toast } = useToast();
   const [summary, setSummary] = useState<TeacherPortraitCategorySummary[]>([]);
+  const [kinds, setKinds] = useState<TeacherPortraitKindSummary[]>([]);
   const [categoryId, setCategoryId] = useState<ImageManagementCategoryId>("student_with_photo");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -94,20 +125,30 @@ const TeacherImageManagementPanel = () => {
   const [pageSize, setPageSize] = useState(24);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [nameByPhone, setNameByPhone] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [jobStatus, setJobStatus] = useState<Record<string, string>>({});
+  const [batch, setBatch] = useState<BatchRow[]>([]);
+  const [runTitle, setRunTitle] = useState("Generate finalized images");
+  const stopRef = useRef(false);
 
   const category = IMAGE_MANAGEMENT_CATEGORIES.find((c) => c.id === categoryId) || IMAGE_MANAGEMENT_CATEGORIES[0];
   const withPhoto = category.photo === "with_photo";
-  const summaryFor = useMemo(() => {
-    const map = new Map(summary.map((row) => [row.id, row]));
-    return map;
-  }, [summary]);
+  const summaryFor = useMemo(() => new Map(summary.map((row) => [row.id, row])), [summary]);
+
+  const jobCounts = useMemo(() => {
+    const counts = { queued: 0, generating: 0, generated: 0, failed: 0, needs_review: 0, skipped: 0, total: batch.length };
+    for (const row of batch) counts[row.status] += 1;
+    return counts;
+  }, [batch]);
+
+  const processed = jobCounts.generated + jobCounts.failed + jobCounts.needs_review + jobCounts.skipped;
+  const pct = jobCounts.total ? Math.round((processed / jobCounts.total) * 100) : 0;
+  const nowGenerating = batch.find((row) => row.status === "generating");
 
   const loadSummary = useCallback(async () => {
     const data = await adminGetTeacherPortraitSummary();
     setSummary(Array.isArray(data.categories) ? data.categories : []);
+    setKinds(Array.isArray(data.kinds) ? data.kinds : []);
   }, []);
 
   const loadList = useCallback(async () => {
@@ -120,9 +161,15 @@ const TeacherImageManagementPanel = () => {
         q: search.trim() || undefined,
         page,
       });
-      setItems(Array.isArray(data.items) ? data.items : []);
+      const next = Array.isArray(data.items) ? data.items : [];
+      setItems(next);
       setTotal(data.total || 0);
       setPageSize(data.pageSize || 24);
+      setNameByPhone((prev) => {
+        const merged = { ...prev };
+        for (const row of next) merged[row.phone] = row.name;
+        return merged;
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to load teacher images";
       toast({ title: "Failed to load", description: message, variant: "destructive" });
@@ -142,7 +189,6 @@ const TeacherImageManagementPanel = () => {
   useEffect(() => {
     setPage(1);
     setSelected(new Set());
-    setJobStatus({});
   }, [categoryId, statusFilter, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
@@ -150,24 +196,32 @@ const TeacherImageManagementPanel = () => {
   const selectedOnPage = pagePhones.filter((phone) => selected.has(phone));
   const allPageSelected = pagePhones.length > 0 && selectedOnPage.length === pagePhones.length;
 
-  const togglePhone = (phone: string, on: boolean) => {
+  const togglePhone = (phone: string, on: boolean, name?: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (on) next.add(phone);
       else next.delete(phone);
       return next;
     });
+    if (name) setNameByPhone((prev) => ({ ...prev, [phone]: name }));
   };
 
   const togglePage = (on: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const phone of pagePhones) {
-        if (on) next.add(phone);
-        else next.delete(phone);
+      for (const row of items) {
+        if (on) next.add(row.phone);
+        else next.delete(row.phone);
       }
       return next;
     });
+    if (on) {
+      setNameByPhone((prev) => {
+        const merged = { ...prev };
+        for (const row of items) merged[row.phone] = row.name;
+        return merged;
+      });
+    }
   };
 
   const selectAllMatching = async () => {
@@ -178,7 +232,13 @@ const TeacherImageManagementPanel = () => {
         status: statusFilter === "all" ? undefined : statusFilter,
         q: search.trim() || undefined,
       });
-      setSelected(new Set(data.phones || []));
+      const teachers = data.teachers || (data.phones || []).map((phone) => ({ phone, name: phone }));
+      setSelected(new Set(teachers.map((row) => row.phone)));
+      setNameByPhone((prev) => {
+        const merged = { ...prev };
+        for (const row of teachers) merged[row.phone] = row.name;
+        return merged;
+      });
       toast({ title: `Selected ${data.total.toLocaleString("en-IN")} teachers` });
     } catch (err: unknown) {
       toast({
@@ -189,7 +249,11 @@ const TeacherImageManagementPanel = () => {
     }
   };
 
-  const applyResult = (phone: string, result: Awaited<ReturnType<typeof adminGenerateTeacherPortrait>>) => {
+  const patchBatch = (phone: string, patch: Partial<BatchRow>) => {
+    setBatch((prev) => prev.map((row) => (row.phone === phone ? { ...row, ...patch } : row)));
+  };
+
+  const applyResult = (phone: string, result: TeacherPortraitGenerateResult) => {
     setItems((prev) =>
       prev.map((row) => {
         if (row.phone !== phone) return row;
@@ -229,7 +293,7 @@ const TeacherImageManagementPanel = () => {
     if (!withPhoto || busy) return;
     const phones = [...selected];
     if (!phones.length) {
-      toast({ title: "Select teachers first", description: "Choose one or more teachers to process." });
+      toast({ title: "Select teachers first", description: "Choose one or more teachers to generate with OpenAI." });
       return;
     }
     const queue = regenerate
@@ -238,18 +302,34 @@ const TeacherImageManagementPanel = () => {
           const row = items.find((item) => item.phone === phone);
           return !row || row.portrait_status !== "GENERATED";
         });
+    const skippedFinalized = regenerate ? [] : phones.filter((phone) => !queue.includes(phone));
     if (!queue.length) {
-      toast({ title: "Nothing to generate", description: "Selected teachers already have finalized images. Use Regenerate to replace them." });
+      toast({
+        title: "Already generated",
+        description: "Every selected teacher already has a finalized image. Use Regenerate to call OpenAI again.",
+      });
       return;
     }
 
+    stopRef.current = false;
+    setRunTitle(regenerate ? "Regenerating with OpenAI" : "Generating with OpenAI");
+    setBatch(
+      queue.map((phone) => ({
+        phone,
+        name: nameByPhone[phone] || items.find((row) => row.phone === phone)?.name || phone,
+        status: "queued" as const,
+        detail: "Waiting for OpenAI",
+      }))
+    );
     setBusy(true);
-    setProgress({ done: 0, total: queue.length });
-    let failed = 0;
-    let generated = 0;
+
     try {
       await runPool(queue, 2, async (phone) => {
-        setJobStatus((prev) => ({ ...prev, [phone]: "generating" }));
+        if (stopRef.current) {
+          patchBatch(phone, { status: "skipped", detail: "Stopped before OpenAI call" });
+          return;
+        }
+        patchBatch(phone, { status: "generating", detail: "Calling OpenAI gpt-image-2" });
         setItems((prev) =>
           prev.map((row) => (row.phone === phone ? { ...row, portrait_status: "GENERATING" } : row))
         );
@@ -259,34 +339,34 @@ const TeacherImageManagementPanel = () => {
             : await adminGenerateTeacherPortrait({ phone, regenerate: false });
           applyResult(phone, result);
           if (result.ok && !result.skipped) {
-            generated += 1;
-            setJobStatus((prev) => ({ ...prev, [phone]: "generated" }));
+            patchBatch(phone, { status: "generated", detail: "Finalized portrait saved" });
           } else if (result.needs_review) {
-            failed += 1;
-            setJobStatus((prev) => ({ ...prev, [phone]: "needs_review" }));
+            patchBatch(phone, { status: "needs_review", detail: result.reason || "Pick a source photo" });
           } else if (result.ok && result.skipped) {
-            setJobStatus((prev) => ({ ...prev, [phone]: result.reason || "skipped" }));
+            patchBatch(phone, {
+              status: result.reason === "already_finalized" ? "skipped" : result.reason === "generating" ? "generating" : "skipped",
+              detail: result.reason === "already_finalized" ? "Already finalized" : result.reason || "Skipped",
+            });
           } else {
-            failed += 1;
-            setJobStatus((prev) => ({ ...prev, [phone]: "failed" }));
+            patchBatch(phone, { status: "failed", detail: result.error || "OpenAI generation failed" });
           }
         } catch (err: unknown) {
-          failed += 1;
-          const message = err instanceof Error ? err.message : "Generation failed";
-          setJobStatus((prev) => ({ ...prev, [phone]: "failed" }));
+          const message = err instanceof Error ? err.message : "OpenAI generation failed";
+          patchBatch(phone, { status: "failed", detail: message });
           setItems((prev) =>
             prev.map((row) =>
               row.phone === phone ? { ...row, portrait_status: "FAILED", portrait_error: message } : row
             )
           );
-        } finally {
-          setProgress((prev) => ({ ...prev, done: prev.done + 1 }));
         }
       });
       await loadSummary();
+      const leftover = skippedFinalized.length
+        ? ` ${skippedFinalized.length} already finalized ${skippedFinalized.length === 1 ? "was" : "were"} skipped.`
+        : "";
       toast({
-        title: regenerate ? "Regenerate finished" : "Generate finished",
-        description: `${generated} finalized, ${failed} need attention, ${queue.length} processed.`,
+        title: stopRef.current ? "Queue stopped" : regenerate ? "Regenerate finished" : "Generate finished",
+        description: leftover || "Live counts are in the run panel.",
       });
     } finally {
       setBusy(false);
@@ -294,6 +374,11 @@ const TeacherImageManagementPanel = () => {
   };
 
   const generateFromCandidate = async (phone: string, sourceNominationId: string) => {
+    if (busy) return;
+    const name = nameByPhone[phone] || items.find((row) => row.phone === phone)?.name || phone;
+    stopRef.current = false;
+    setRunTitle("Generating with OpenAI");
+    setBatch([{ phone, name, status: "generating", detail: "Calling OpenAI gpt-image-2" }]);
     setBusy(true);
     try {
       const result = await adminGenerateTeacherPortrait({
@@ -302,16 +387,14 @@ const TeacherImageManagementPanel = () => {
         source_nomination_id: sourceNominationId,
       });
       applyResult(phone, result);
+      if (result.ok && !result.skipped) patchBatch(phone, { status: "generated", detail: "Finalized portrait saved" });
+      else if (result.needs_review) patchBatch(phone, { status: "needs_review", detail: result.reason || "Still needs review" });
+      else if (!result.ok) patchBatch(phone, { status: "failed", detail: result.error || "OpenAI generation failed" });
       await loadSummary();
-      if (result.ok && !result.skipped) toast({ title: "Finalized image generated" });
-      else if (result.needs_review) toast({ title: "Still needs review", variant: "destructive" });
-      else if (!result.ok) toast({ title: "Generation failed", description: result.error, variant: "destructive" });
     } catch (err: unknown) {
-      toast({
-        title: "Generation failed",
-        description: err instanceof Error ? err.message : "Request failed",
-        variant: "destructive",
-      });
+      const message = err instanceof Error ? err.message : "Request failed";
+      patchBatch(phone, { status: "failed", detail: message });
+      toast({ title: "Generation failed", description: message, variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -322,21 +405,65 @@ const TeacherImageManagementPanel = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-heading text-base sm:text-lg font-bold text-primary-foreground flex items-center gap-2">
-          <ImageIcon className="w-4 h-4 sm:w-5 sm:h-5 text-secondary" />
-          Teacher Image Management
-        </h2>
-        <p className="text-xs text-primary-foreground/40 mt-1">
-          Unique teachers per category. Finalized images are cropped production assets reused by video generation.
-        </p>
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <div>
+          <h2 className="font-heading text-xl sm:text-2xl font-bold text-primary-foreground flex items-center gap-2">
+            <ImageIcon className="w-5 h-5 text-secondary" />
+            Teacher Image Management
+          </h2>
+          <p className="text-sm text-primary-foreground/50 mt-1 max-w-2xl">
+            Unique teachers by nomination kind. Generate calls OpenAI, crops the canvas, and stores one reusable
+            finalized portrait per phone.
+          </p>
+        </div>
+        {withPhoto ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              className="h-10 px-4 bg-secondary text-[#1a0505] font-semibold hover:bg-secondary/90"
+              disabled={busy || selected.size === 0}
+              onClick={() => void runSelected(false)}
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Generate with OpenAI
+              {selected.size ? ` (${selected.size})` : ""}
+            </Button>
+            <Button
+              variant="hero-outline"
+              size="sm"
+              className="text-xs h-10"
+              disabled={busy || selected.size === 0}
+              onClick={() => void runSelected(true)}
+            >
+              Regenerate selected
+            </Button>
+          </div>
+        ) : null}
       </div>
 
-      <div className="space-y-4">
-        {GROUPS.map((group) => (
-          <div key={group.kind} className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 p-3 sm:p-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-primary-foreground/45 mb-3">{group.group}</p>
-            <div className="grid sm:grid-cols-2 gap-3">
+      <div className="grid lg:grid-cols-3 gap-3">
+        {GROUPS.map((group) => {
+          const kindStats = kinds.find((row) => row.kind === group.kind);
+          return (
+          <div key={group.kind} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="px-1 mb-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">{group.group}</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="rounded-lg bg-black/20 border border-white/5 px-2.5 py-2">
+                  <p className="text-[10px] text-white/40">Nominations</p>
+                  <p className="text-lg font-heading font-bold text-white tabular-nums">
+                    {(kindStats?.nominations ?? 0).toLocaleString("en-IN")}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-black/20 border border-white/5 px-2.5 py-2">
+                  <p className="text-[10px] text-white/40">Unique teachers</p>
+                  <p className="text-lg font-heading font-bold text-white tabular-nums">
+                    {(kindStats?.unique_teachers ?? 0).toLocaleString("en-IN")}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
               {IMAGE_MANAGEMENT_CATEGORIES.filter((cat) => cat.kind === group.kind).map((cat) => {
                 const row = summaryFor.get(cat.id);
                 const selectedCat = categoryId === cat.id;
@@ -345,95 +472,143 @@ const TeacherImageManagementPanel = () => {
                     key={cat.id}
                     type="button"
                     onClick={() => setCategoryId(cat.id)}
-                    className={`text-left rounded-xl border p-4 transition-colors ${
+                    className={`text-left rounded-xl border px-3 py-3 transition-colors ${
                       selectedCat
-                        ? "border-secondary bg-secondary/10"
-                        : "border-primary-foreground/10 bg-primary-foreground/[0.03] hover:border-primary-foreground/20"
+                        ? "border-secondary bg-secondary/15"
+                        : "border-white/10 bg-white/[0.02] hover:border-white/20"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-primary-foreground">{cat.photoLabel}</p>
-                        <p className="text-[11px] text-primary-foreground/40 mt-0.5">{group.group}</p>
-                      </div>
-                      <div className="text-2xl font-heading font-bold text-primary-foreground">
-                        {(row?.unique_teachers ?? 0).toLocaleString("en-IN")}
-                      </div>
-                    </div>
-                    {row ? (
-                      <p className="text-[11px] text-primary-foreground/45 mt-2">
-                        {cat.photo === "without_photo"
-                          ? `${row.status.NO_PHOTO} without photo`
-                          : `${row.status.GENERATED} generated · ${row.status.NOT_GENERATED} not generated · ${row.status.NEEDS_REVIEW} review`}
+                    <p className="text-xs font-semibold text-white/80">{cat.photoLabel}</p>
+                    <p className="text-2xl font-heading font-bold text-white mt-1 tabular-nums">
+                      {(row?.unique_teachers ?? 0).toLocaleString("en-IN")}
+                    </p>
+                    <p className="text-[10px] text-white/40 mt-1">
+                      unique · {(row?.nominations ?? 0).toLocaleString("en-IN")} nominations
+                    </p>
+                    {row && cat.photo === "with_photo" ? (
+                      <p className="text-[10px] text-white/35 mt-0.5">
+                        {row.status.GENERATED} done · {row.status.NOT_GENERATED} waiting
                       </p>
-                    ) : null}
+                    ) : (
+                      <p className="text-[10px] text-white/35 mt-0.5">No generate action</p>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
-      <div className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-primary-foreground/10 space-y-3">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      {batch.length > 0 ? (
+        <div className="rounded-2xl border border-secondary/30 bg-secondary/10 overflow-hidden">
+          <div className="p-4 sm:p-5 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-heading font-bold text-white flex items-center gap-2">
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin text-secondary" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                  {runTitle}
+                </p>
+                <p className="text-sm text-white/60 mt-1">
+                  {processed} of {jobCounts.total} processed
+                  {nowGenerating ? ` · now ${nowGenerating.name}` : busy ? " · starting OpenAI…" : ""}
+                </p>
+              </div>
+              {busy ? (
+                <Button
+                  variant="hero-outline"
+                  size="sm"
+                  className="text-xs h-9"
+                  onClick={() => {
+                    stopRef.current = true;
+                  }}
+                >
+                  <Square className="w-3.5 h-3.5" />
+                  Stop queue
+                </Button>
+              ) : (
+                <button type="button" className="text-xs text-white/45 hover:text-white" onClick={() => setBatch([])}>
+                  Dismiss
+                </button>
+              )}
+            </div>
+            <div className="h-2 rounded-full bg-black/30 overflow-hidden">
+              <div className="h-full bg-secondary transition-all duration-300" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { label: "In queue", value: jobCounts.queued, icon: Clock, tone: "text-white/80" },
+                { label: "Generating", value: jobCounts.generating, icon: Loader2, tone: "text-sky-300" },
+                { label: "Generated", value: jobCounts.generated, icon: CheckCircle2, tone: "text-emerald-300" },
+                { label: "Failed", value: jobCounts.failed + jobCounts.needs_review, icon: XCircle, tone: "text-red-300" },
+              ].map((stat) => (
+                <div key={stat.label} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+                  <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-white/40">
+                    <stat.icon className={`w-3.5 h-3.5 ${stat.tone} ${stat.label === "Generating" && busy ? "animate-spin" : ""}`} />
+                    {stat.label}
+                  </div>
+                  <p className={`text-2xl font-heading font-bold tabular-nums mt-1 ${stat.tone}`}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="max-h-56 overflow-auto rounded-xl border border-white/10 divide-y divide-white/5">
+              {batch.map((row) => (
+                <div key={row.phone} className="flex items-center gap-3 px-3 py-2 bg-black/10">
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      row.status === "generated"
+                        ? "bg-emerald-400"
+                        : row.status === "generating"
+                          ? "bg-sky-400 animate-pulse"
+                          : row.status === "failed" || row.status === "needs_review"
+                            ? "bg-red-400"
+                            : "bg-white/30"
+                    }`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white truncate">{row.name}</p>
+                    <p className="text-[11px] text-white/40">{row.phone}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-[11px] font-semibold text-white/80">{JOB_LABEL[row.status]}</p>
+                    {row.detail ? <p className="text-[10px] text-white/40 max-w-[180px] truncate">{row.detail}</p> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-white/10 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <p className="font-heading font-bold text-primary-foreground">
+              <p className="font-heading font-bold text-white">
                 {category.group} · {category.photoLabel}
               </p>
-              <p className="text-xs text-primary-foreground/40 mt-0.5">
+              <p className="text-xs text-white/40 mt-0.5">
                 {total.toLocaleString("en-IN")} unique teacher{total !== 1 ? "s" : ""}
                 {selected.size ? ` · ${selected.size} selected` : ""}
-                {busy ? ` · ${progress.done} / ${progress.total}` : ""}
               </p>
             </div>
-            {withPhoto ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="hero-outline"
-                  size="sm"
-                  className="text-xs h-9"
-                  disabled={busy || selected.size === 0}
-                  onClick={() => void runSelected(false)}
-                >
-                  {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  Generate finalized images
-                </Button>
-                <Button
-                  variant="hero-outline"
-                  size="sm"
-                  className="text-xs h-9"
-                  disabled={busy || selected.size === 0}
-                  onClick={() => void runSelected(true)}
-                >
-                  Regenerate image
-                </Button>
-              </div>
-            ) : (
-              <p className="text-xs text-primary-foreground/40">Generate is hidden for without-photo teachers.</p>
-            )}
+            {!withPhoto ? (
+              <p className="text-xs text-white/40">Without-photo teachers stay on the no-photo plate. Generate is not used here.</p>
+            ) : null}
           </div>
-          {busy ? (
-            <div className="h-1.5 rounded-full bg-primary-foreground/10 overflow-hidden">
-              <div
-                className="h-full bg-secondary transition-all"
-                style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%` }}
-              />
-            </div>
-          ) : null}
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary-foreground/30" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
               <Input
                 placeholder="Search name or phone..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9"
+                className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm h-9"
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[180px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9">
+              <SelectTrigger className="w-full sm:w-[200px] bg-white/5 border-white/10 text-white text-xs h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -450,17 +625,17 @@ const TeacherImageManagementPanel = () => {
             </Select>
           </div>
           {withPhoto ? (
-            <div className="flex flex-wrap items-center gap-3 text-xs text-primary-foreground/55">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-white/55">
               <label className="inline-flex items-center gap-2">
                 <Checkbox checked={allPageSelected} onCheckedChange={(on) => togglePage(Boolean(on))} />
-                Select page
+                Select this page
               </label>
               <button type="button" className="font-semibold text-secondary hover:text-secondary/80" onClick={() => void selectAllMatching()}>
                 Select all matching ({total.toLocaleString("en-IN")})
               </button>
               {selected.size > 0 ? (
-                <button type="button" className="hover:text-primary-foreground" onClick={() => setSelected(new Set())}>
-                  Clear selection
+                <button type="button" className="hover:text-white" onClick={() => setSelected(new Set())}>
+                  Clear
                 </button>
               ) : null}
             </div>
@@ -470,110 +645,131 @@ const TeacherImageManagementPanel = () => {
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 text-secondary animate-spin" />
-            <span className="ml-3 text-primary-foreground/60 text-sm">Loading unique teachers…</span>
+            <span className="ml-3 text-white/60 text-sm">Loading unique teachers…</span>
           </div>
         ) : items.length === 0 ? (
-          <div className="py-16 text-center text-primary-foreground/40">No unique teachers in this category.</div>
+          <div className="py-16 text-center text-white/40">No unique teachers in this category.</div>
         ) : (
           <div className="p-3 sm:p-4 grid md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {items.map((row, i) => (
-              <motion.div
-                key={row.phone}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i, 8) * 0.03 }}
-                className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/[0.04] p-3 space-y-3"
-              >
-                <div className="flex items-start gap-3">
-                  {withPhoto ? (
-                    <Checkbox
-                      checked={selected.has(row.phone)}
-                      onCheckedChange={(on) => togglePhone(row.phone, Boolean(on))}
-                      className="mt-1"
-                    />
-                  ) : null}
-                  <div
-                    className="relative w-20 h-36 rounded-lg overflow-hidden border border-white/10 flex-shrink-0"
-                    style={row.cropped_cloudinary_url ? CHECKERBOARD : { background: "rgba(255,255,255,0.04)" }}
-                  >
-                    {row.cropped_cloudinary_url ? (
-                      <img
-                        src={cloudinaryDisplayUrl(row.cropped_cloudinary_url, { width: 240, height: 426, crop: "fit" })}
-                        alt={row.name}
-                        className="absolute inset-0 h-full w-full object-contain"
+            {items.map((row, i) => {
+              const live = batch.find((job) => job.phone === row.phone);
+              const generating = live?.status === "generating" || row.portrait_status === "GENERATING";
+              return (
+                <motion.div
+                  key={row.phone}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(i, 8) * 0.03 }}
+                  className={`rounded-xl border p-3 space-y-3 ${
+                    generating
+                      ? "border-sky-400/40 bg-sky-500/10"
+                      : selected.has(row.phone)
+                        ? "border-secondary/40 bg-secondary/5"
+                        : "border-white/10 bg-white/[0.03]"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    {withPhoto ? (
+                      <Checkbox
+                        checked={selected.has(row.phone)}
+                        onCheckedChange={(on) => togglePhone(row.phone, Boolean(on), row.name)}
+                        className="mt-1"
+                        disabled={busy}
                       />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white/35 text-center px-1">
-                        {withPhoto ? "No finalized image" : "No photo"}
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-heading font-bold text-white truncate">{row.name || "Unnamed teacher"}</p>
-                    <p className="text-xs text-primary-foreground/50">{row.phone}</p>
-                    <p className="text-[11px] text-primary-foreground/40 mt-1">
-                      {row.nomination_count} nomination{row.nomination_count !== 1 ? "s" : ""} in this category
-                    </p>
-                    <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_CHIP[row.portrait_status]}`}>
-                      {STATUS_LABEL[row.portrait_status]}
-                    </span>
-                    {jobStatus[row.phone] ? (
-                      <p className="text-[11px] text-primary-foreground/45 mt-1">{jobStatus[row.phone].replace(/_/g, " ")}</p>
                     ) : null}
-                  </div>
-                </div>
-                <div className="text-[11px] text-primary-foreground/45 space-y-0.5">
-                  <p>Source nomination: {row.source_nomination_id || "—"}</p>
-                  <p>Last generated: {formatWhen(row.finalized_at || row.generated_at)}</p>
-                  {row.portrait_error ? <p className="text-amber-300">{row.portrait_error}</p> : null}
-                </div>
-                {row.portrait_status === "NEEDS_REVIEW" && row.candidates.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-[10px] uppercase tracking-wider text-primary-foreground/40">Pick a source photo</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {row.candidates.map((candidate) => (
-                        <button
-                          key={candidate.id}
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void generateFromCandidate(row.phone, candidate.id)}
-                          className="rounded-lg border border-white/10 overflow-hidden hover:border-secondary/50"
-                          title={`Use photo from ${candidate.teacher_name || candidate.id}`}
-                        >
-                          <img
-                            src={cloudinaryDisplayUrl(candidate.photo_url, { width: 160, height: 160, crop: "fill" })}
-                            alt={candidate.teacher_name}
-                            className="w-full h-16 object-cover"
-                          />
-                        </button>
-                      ))}
+                    <div
+                      className="relative w-[88px] h-[156px] rounded-lg overflow-hidden border border-white/10 flex-shrink-0"
+                      style={row.cropped_cloudinary_url ? CHECKERBOARD : { background: "rgba(255,255,255,0.04)" }}
+                    >
+                      {row.cropped_cloudinary_url ? (
+                        <img
+                          src={cloudinaryDisplayUrl(row.cropped_cloudinary_url, { width: 240, height: 426, crop: "fit" })}
+                          alt={row.name}
+                          className="absolute inset-0 h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white/35 text-center px-2">
+                          {withPhoto ? "Awaiting OpenAI" : "No photo"}
+                        </div>
+                      )}
+                      {generating ? (
+                        <div className="absolute inset-0 bg-black/45 flex flex-col items-center justify-center gap-1">
+                          <Loader2 className="w-5 h-5 text-white animate-spin" />
+                          <span className="text-[10px] text-white/80">OpenAI</span>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-heading font-bold text-white truncate">{row.name || "Unnamed teacher"}</p>
+                      <p className="text-xs text-white/50">{row.phone}</p>
+                      <p className="text-[11px] text-white/40 mt-1">
+                        {row.nomination_count} nomination{row.nomination_count !== 1 ? "s" : ""} in this category
+                      </p>
+                      <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_CHIP[row.portrait_status]}`}>
+                        {STATUS_LABEL[row.portrait_status]}
+                      </span>
+                      {live ? (
+                        <p className="text-[11px] text-white/55 mt-1">{live.detail || JOB_LABEL[live.status]}</p>
+                      ) : null}
                     </div>
                   </div>
-                ) : null}
-              </motion.div>
-            ))}
+                  <div className="text-[11px] text-white/45 space-y-0.5">
+                    <p>Last generated: {formatWhen(row.finalized_at || row.generated_at)}</p>
+                    {row.portrait_error ? (
+                      <p className="text-amber-300 flex items-start gap-1">
+                        <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                        {row.portrait_error}
+                      </p>
+                    ) : null}
+                  </div>
+                  {row.portrait_status === "NEEDS_REVIEW" && row.candidates.length > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-[10px] uppercase tracking-wider text-white/40">Pick a source photo to send to OpenAI</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {row.candidates.map((candidate) => (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void generateFromCandidate(row.phone, candidate.id)}
+                            className="rounded-lg border border-white/10 overflow-hidden hover:border-secondary/50"
+                            title={`Use photo from ${candidate.teacher_name || candidate.id}`}
+                          >
+                            <img
+                              src={cloudinaryDisplayUrl(candidate.photo_url, { width: 160, height: 160, crop: "fill" })}
+                              alt={candidate.teacher_name}
+                              className="w-full h-16 object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </motion.div>
+              );
+            })}
           </div>
         )}
 
         {total > pageSize ? (
-          <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-primary-foreground/10 text-xs text-primary-foreground/50">
+          <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-white/10 text-xs text-white/50">
             <span>
               Page {page} of {totalPages}
             </span>
             <div className="flex gap-4">
               <button
                 type="button"
-                disabled={page <= 1}
+                disabled={page <= 1 || busy}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="font-semibold text-secondary disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                className="font-semibold text-secondary disabled:text-white/25 disabled:pointer-events-none"
               >
                 Previous
               </button>
               <button
                 type="button"
-                disabled={page >= totalPages}
+                disabled={page >= totalPages || busy}
                 onClick={() => setPage((p) => p + 1)}
-                className="font-semibold text-secondary disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                className="font-semibold text-secondary disabled:text-white/25 disabled:pointer-events-none"
               >
                 Next
               </button>
