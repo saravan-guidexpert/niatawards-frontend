@@ -510,9 +510,13 @@ export type TeacherPortraitCategorySummary = {
     failed: number;
     total: number;
     not_generated?: number;
+    not_generated_finalized?: number;
+    not_generated_no_photo?: number;
     teachers?: {
       generated: number;
       not_generated: number;
+      not_generated_finalized?: number;
+      not_generated_no_photo?: number;
       processing: number;
       failed: number;
     };
@@ -804,4 +808,19 @@ export const adminGetTeacherVideoPreview = (opts: { phone: string; kind: string;
     category_icon_label: string;
     audio_filename: string;
   }>(`/api/admin/video-generation/preview?${params.toString()}`);
+};
+
+export type TeacherGeneratedVideo = {
+  nomination_id: string;
+  video_url: string;
+  video_render_id: string | null;
+  generated_at: string | null;
+  label: string;
+};
+
+export const adminGetTeacherVideos = (opts: { phone: string; kind: string; photo: string }) => {
+  const params = new URLSearchParams(opts);
+  return adminRequest<{ phone: string; name: string; videos: TeacherGeneratedVideo[] }>(
+    `/api/admin/video-generation/videos?${params.toString()}`
+  );
 };

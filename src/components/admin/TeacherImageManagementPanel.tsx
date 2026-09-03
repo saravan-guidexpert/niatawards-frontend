@@ -6,7 +6,9 @@ import {
   Clapperboard,
   Clock,
   Images,
+  Info,
   Loader2,
+  Play,
   Search,
   Sparkles,
   Square,
@@ -21,6 +23,7 @@ import { cloudinaryDisplayUrl } from "@/lib/cloudinaryUrl";
 import { API_URL } from "@/lib/apiBase";
 import {
   IMAGE_MANAGEMENT_CATEGORIES,
+  categoryIdOf,
   type ImageManagementCategoryId,
   type NominationKind,
   type PortraitAdminStatus,
@@ -36,7 +39,9 @@ import {
   adminRegenerateTeacherPortrait,
   adminStartVideoGeneration,
   adminGetTeacherVideoPreview,
+  adminGetTeacherVideos,
   type GenerationReadiness,
+  type TeacherGeneratedVideo,
   type TeacherPortraitCategorySummary,
   type TeacherPortraitGenerateResult,
   type TeacherPortraitKindSummary,
@@ -64,8 +69,10 @@ const STATUS_LABEL: Record<PortraitAdminStatus, string> = {
 };
 
 const VIDEO_STATUS_LABEL = {
+  not_generated_finalized: "Not generated · finalized image",
+  not_generated_no_photo: "Not generated · no photo",
+  not_generated: "Not generated (all)",
   generated: "Generated",
-  not_generated: "Not generated",
   processing: "Processing",
   failed: "Failed",
 } as const;
@@ -84,6 +91,8 @@ const STATUS_CHIP: Record<PortraitAdminStatus, string> = {
 const VIDEO_STATUS_CHIP: Record<VideoStatusFilter | "blocked", string> = {
   generated: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
   not_generated: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+  not_generated_finalized: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+  not_generated_no_photo: "bg-amber-500/15 text-amber-300 border-amber-500/25",
   processing: "bg-sky-500/15 text-sky-300 border-sky-500/25",
   failed: "bg-red-500/15 text-red-300 border-red-500/25",
   blocked: "bg-white/10 text-white/55 border-white/15",
@@ -111,6 +120,53 @@ const JOB_LABEL: Record<JobState, string> = {
   failed: "Failed",
   needs_review: "Needs review",
   skipped: "Skipped",
+};
+
+const mediaUrl = (value: string | null | undefined) => {
+  const path = String(value || "").trim();
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
+};
+
+const videoPlayerUrl = (video: TeacherGeneratedVideo) => {
+  const base = mediaUrl(video.video_url);
+  if (!base) return null;
+  const rid = String(video.video_render_id || "").trim();
+  if (!rid) return base;
+  return `${base}${base.includes("?") ? "&" : "?"}v=${encodeURIComponent(rid)}`;
+};
+
+const GeneratedVideoPlayer = ({ url, title }: { url: string; title: string }) => {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <div className="mx-auto w-full max-w-[280px] rounded-xl overflow-hidden border border-white/10 bg-black">
+      <div className="relative w-full" style={{ paddingTop: "177.78%" }}>
+        {playing ? (
+          <video
+            className="absolute inset-0 h-full w-full object-contain bg-black"
+            src={url}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            title={title}
+          />
+        ) : (
+          <button
+            type="button"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black text-white/80 hover:text-white"
+            onClick={() => setPlaying(true)}
+          >
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/30 bg-white/10">
+              <Play className="w-5 h-5 ml-0.5" />
+            </span>
+            <span className="text-[11px]">Play generated video</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const emptyStatus = (): Record<PortraitAdminStatus, number> => ({
@@ -173,15 +229,32 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
     image?: string | null;
     template?: string | null;
     icon?: string | null;
+    videos?: TeacherGeneratedVideo[];
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [chosenSource, setChosenSource] = useState<Record<string, string>>({});
   const [readiness, setReadiness] = useState<GenerationReadiness | null>(null);
 
   const category = IMAGE_MANAGEMENT_CATEGORIES.find((c) => c.id === categoryId) || IMAGE_MANAGEMENT_CATEGORIES[0];
   const withPhoto = category.photo === "with_photo";
-  const blockedReason = isVideos ? readiness?.video_error : readiness?.portrait_error;
+  const photoBlocked = Boolean(isImages && readiness?.portrait_error);
+  const videoQueuesOnly = Boolean(isVideos && readiness && readiness.renders_here === false);
   const summaryFor = useMemo(() => new Map(summary.map((row) => [row.id, row])), [summary]);
+
+  const applyVideoQueue = (kind: NominationKind, filter: "not_generated_finalized" | "not_generated_no_photo") => {
+    setCategoryId(categoryIdOf(kind, filter === "not_generated_finalized" ? "with_photo" : "without_photo"));
+    setStatusFilter(filter);
+  };
+
+  const applyStatusFilter = (value: string) => {
+    if (isVideos && value === "not_generated_finalized") {
+      setCategoryId(categoryIdOf(category.kind, "with_photo"));
+    } else if (isVideos && value === "not_generated_no_photo") {
+      setCategoryId(categoryIdOf(category.kind, "without_photo"));
+    }
+    setStatusFilter(value);
+  };
 
   const jobCounts = useMemo(() => {
     const counts = { queued: 0, generating: 0, generated: 0, failed: 0, needs_review: 0, skipped: 0, total: batch.length };
@@ -563,9 +636,41 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
     }
   };
 
-  const openPreview = async (row: TeacherPortraitListItem, kind: "image" | "template") => {
+  const openPreview = async (row: TeacherPortraitListItem, kind: "image" | "template" | "video") => {
     if (kind === "image") {
       setPreview({ title: `${row.name} — finalized image`, image: row.cropped_cloudinary_url });
+      return;
+    }
+    if (kind === "video") {
+      setPreviewLoading(true);
+      setActiveVideoId(null);
+      setPreview({ title: `${row.name} — generated video` });
+      try {
+        const data = await adminGetTeacherVideos({
+          phone: row.phone,
+          kind: category.kind,
+          photo: category.photo,
+        });
+        if (!data.videos.length) {
+          setPreview(null);
+          toast({ title: "No generated video", description: "This teacher has no playable video yet.", variant: "destructive" });
+          return;
+        }
+        setActiveVideoId(data.videos[0].nomination_id);
+        setPreview({
+          title: `${row.name} — generated video`,
+          videos: data.videos,
+        });
+      } catch (err: unknown) {
+        setPreview(null);
+        toast({
+          title: "Could not load video",
+          description: err instanceof Error ? err.message : "Request failed",
+          variant: "destructive",
+        });
+      } finally {
+        setPreviewLoading(false);
+      }
       return;
     }
     setPreviewLoading(true);
@@ -635,8 +740,18 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   const videoTeacherCounts = activeSummary?.videos?.teachers || {
     generated: 0,
     not_generated: 0,
+    not_generated_finalized: 0,
+    not_generated_no_photo: 0,
     processing: 0,
     failed: 0,
+  };
+  const finalizedQueue = summaryFor.get(categoryIdOf(category.kind, "with_photo"));
+  const noPhotoQueue = summaryFor.get(categoryIdOf(category.kind, "without_photo"));
+  const videoQueueCounts = {
+    not_generated_finalized: finalizedQueue?.videos?.teachers?.not_generated_finalized ?? 0,
+    not_generated_no_photo: noPhotoQueue?.videos?.teachers?.not_generated_no_photo ?? 0,
+    not_generated_finalized_noms: finalizedQueue?.videos?.not_generated_finalized ?? 0,
+    not_generated_no_photo_noms: noPhotoQueue?.videos?.not_generated_no_photo ?? 0,
   };
 
   return (
@@ -707,15 +822,23 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
         </div>
       </div>
 
-      {blockedReason ? (
+      {photoBlocked ? (
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-amber-300 mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm font-semibold text-amber-200">
-              {isVideos ? "This server does not render videos" : "Photo generation is blocked"}
-            </p>
-            <p className="text-xs text-amber-200/70 mt-0.5">
-              {isVideos ? `Queued videos wait for the render host. ${blockedReason}` : blockedReason}
+            <p className="text-sm font-semibold text-amber-200">Photo generation is blocked</p>
+            <p className="text-xs text-amber-200/70 mt-0.5">{readiness?.portrait_error}</p>
+          </div>
+        </div>
+      ) : null}
+
+      {videoQueuesOnly ? (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 flex items-start gap-3">
+          <Info className="w-4 h-4 text-white/45 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-white/80">This API queues videos</p>
+            <p className="text-xs text-white/50 mt-0.5">
+              Encoding runs on a machine that has the bg-remove renderer. Generate still queues jobs from here.
             </p>
           </div>
         </div>
@@ -746,14 +869,28 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
             <div className="grid grid-cols-2 gap-2">
               {IMAGE_MANAGEMENT_CATEGORIES.filter((cat) => cat.kind === group.kind).map((cat) => {
                 const row = summaryFor.get(cat.id);
-                const selectedCat = categoryId === cat.id;
+                const browsingCat =
+                  categoryId === cat.id &&
+                  statusFilter !== "not_generated_finalized" &&
+                  statusFilter !== "not_generated_no_photo";
+                const readyTeachers =
+                  cat.photo === "with_photo"
+                    ? row?.videos?.teachers?.not_generated_finalized ?? 0
+                    : row?.videos?.teachers?.not_generated_no_photo ?? 0;
+                const readyNoms =
+                  cat.photo === "with_photo"
+                    ? row?.videos?.not_generated_finalized ?? 0
+                    : row?.videos?.not_generated_no_photo ?? 0;
                 return (
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => setCategoryId(cat.id)}
+                    onClick={() => {
+                      setCategoryId(cat.id);
+                      if (isVideos) setStatusFilter("all");
+                    }}
                     className={`text-left rounded-xl border px-3 py-3 transition-colors ${
-                      selectedCat
+                      browsingCat
                         ? "border-secondary bg-secondary/15"
                         : "border-white/10 bg-white/[0.02] hover:border-white/20"
                     }`}
@@ -773,6 +910,10 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                         <p className="text-[10px] text-amber-300/80">
                           Not generated {(row?.videos?.not_generated ?? Math.max(0, (row?.videos?.total ?? row?.nominations ?? 0) - (row?.videos?.generated ?? 0))).toLocaleString("en-IN")}
                         </p>
+                        <p className="text-[10px] text-secondary/80 mt-0.5">
+                          Ready {readyTeachers.toLocaleString("en-IN")}
+                          {readyNoms ? ` · ${readyNoms.toLocaleString("en-IN")} videos` : ""}
+                        </p>
                         {(row?.videos?.processing || row?.videos?.failed) ? (
                           <p className="text-[10px] text-white/35">
                             {row?.videos?.processing ? `${row.videos.processing} processing` : ""}
@@ -790,6 +931,46 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                 );
               })}
             </div>
+            {isVideos ? (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {([
+                  {
+                    filter: "not_generated_finalized" as const,
+                    label: "Not generated · finalized image",
+                    teachers: summaryFor.get(categoryIdOf(group.kind, "with_photo"))?.videos?.teachers?.not_generated_finalized ?? 0,
+                    noms: summaryFor.get(categoryIdOf(group.kind, "with_photo"))?.videos?.not_generated_finalized ?? 0,
+                  },
+                  {
+                    filter: "not_generated_no_photo" as const,
+                    label: "Not generated · no photo",
+                    teachers: summaryFor.get(categoryIdOf(group.kind, "without_photo"))?.videos?.teachers?.not_generated_no_photo ?? 0,
+                    noms: summaryFor.get(categoryIdOf(group.kind, "without_photo"))?.videos?.not_generated_no_photo ?? 0,
+                  },
+                ]).map((queue) => {
+                  const selectedQueue = category.kind === group.kind && statusFilter === queue.filter;
+                  return (
+                    <button
+                      key={queue.filter}
+                      type="button"
+                      onClick={() => applyVideoQueue(group.kind, queue.filter)}
+                      className={`text-left rounded-xl border px-3 py-2.5 transition-colors ${
+                        selectedQueue
+                          ? "border-secondary bg-secondary/15"
+                          : "border-amber-500/20 bg-amber-500/[0.06] hover:border-amber-500/40"
+                      }`}
+                    >
+                      <p className="text-[11px] font-semibold text-amber-100/90 leading-snug">{queue.label}</p>
+                      <p className="text-lg font-heading font-bold text-white tabular-nums mt-1">
+                        {queue.teachers.toLocaleString("en-IN")}
+                      </p>
+                      <p className="text-[10px] text-white/40">
+                        teachers · {queue.noms.toLocaleString("en-IN")} videos
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
           );
         })}
@@ -955,7 +1136,11 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <p className="font-heading font-bold text-white">
-                {category.group} · {category.photoLabel}
+                {statusFilter === "not_generated_finalized"
+                  ? `${category.group} · Not generated · finalized image`
+                  : statusFilter === "not_generated_no_photo"
+                    ? `${category.group} · Not generated · no photo`
+                    : `${category.group} · ${category.photoLabel}`}
               </p>
               <p className="text-xs text-white/40 mt-0.5">
                 {total.toLocaleString("en-IN")} unique teacher{total !== 1 ? "s" : ""}
@@ -980,20 +1165,26 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                 className="pl-9 bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm h-9"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[220px] bg-white/5 border-white/10 text-white text-xs h-9">
+            <Select value={statusFilter} onValueChange={applyStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[280px] bg-white/5 border-white/10 text-white text-xs h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {isVideos ? (
                   <>
                     <SelectItem value="all">All videos</SelectItem>
-                    {(Object.keys(VIDEO_STATUS_LABEL) as VideoStatusFilter[]).map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {VIDEO_STATUS_LABEL[status]}
-                        {videoTeacherCounts[status] ? ` (${videoTeacherCounts[status]})` : ""}
-                      </SelectItem>
-                    ))}
+                    {(Object.keys(VIDEO_STATUS_LABEL) as VideoStatusFilter[]).map((status) => {
+                      const count =
+                        status === "not_generated_finalized" || status === "not_generated_no_photo"
+                          ? videoQueueCounts[status]
+                          : videoTeacherCounts[status];
+                      return (
+                        <SelectItem key={status} value={status}>
+                          {VIDEO_STATUS_LABEL[status]}
+                          {count ? ` (${count})` : ""}
+                        </SelectItem>
+                      );
+                    })}
                   </>
                 ) : (
                   <>
@@ -1150,6 +1341,12 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                         View template
                       </Button>
                     ) : null}
+                    {isVideos && videos.generated > 0 ? (
+                      <Button variant="hero-outline" size="sm" className="text-[11px] h-8 gap-1" onClick={() => void openPreview(row, "video")}>
+                        <Play className="w-3 h-3" />
+                        {videos.generated > 1 ? `View videos (${videos.generated})` : "View video"}
+                      </Button>
+                    ) : null}
                     {isImages && withPhoto && (row.can_generate_image || row.portrait_status === "NEEDS_REVIEW" || row.portrait_status === "FAILED") ? (
                       <Button
                         size="sm"
@@ -1292,6 +1489,48 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
             {previewLoading ? (
               <div className="flex items-center justify-center py-16">
                 <Loader2 className="w-6 h-6 text-secondary animate-spin" />
+              </div>
+            ) : preview?.videos?.length ? (
+              <div className="space-y-4">
+                {preview.videos.length > 1 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {preview.videos.map((video, index) => (
+                      <button
+                        key={video.nomination_id}
+                        type="button"
+                        onClick={() => setActiveVideoId(video.nomination_id)}
+                        className={`text-[11px] px-2.5 py-1 rounded-full border ${
+                          (activeVideoId || preview.videos?.[0]?.nomination_id) === video.nomination_id
+                            ? "border-secondary text-secondary bg-secondary/10"
+                            : "border-white/15 text-white/60 hover:text-white"
+                        }`}
+                      >
+                        Video {index + 1}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {(() => {
+                  const current =
+                    preview.videos.find((video) => video.nomination_id === activeVideoId) || preview.videos[0];
+                  const url = videoPlayerUrl(current);
+                  if (!url) return <p className="text-sm text-white/50">This video file is not playable.</p>;
+                  return (
+                    <div className="space-y-2">
+                      <GeneratedVideoPlayer
+                        key={`${current.nomination_id}:${current.video_render_id || ""}`}
+                        url={url}
+                        title={current.label}
+                      />
+                      <p className="text-[11px] text-white/45 text-center">
+                        {current.label}
+                        {current.generated_at
+                          ? ` · ${new Date(current.generated_at).toLocaleString("en-IN")}`
+                          : ""}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <div className="grid sm:grid-cols-2 gap-4">
