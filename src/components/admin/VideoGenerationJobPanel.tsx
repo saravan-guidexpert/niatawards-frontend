@@ -181,7 +181,9 @@ const VideoGenerationJobPanel = ({ job, onJobChange, onClose }: Props) => {
           <div className="h-full bg-secondary transition-all duration-300" style={{ width: `${job.progress_pct}%` }} />
         </div>
         <p className="text-sm text-white/70">
-          {job.completed.toLocaleString("en-IN")} / {job.total.toLocaleString("en-IN")} · {job.progress_pct}%
+          {job.completed.toLocaleString("en-IN")} completed
+          {job.failed ? ` · ${job.failed.toLocaleString("en-IN")} failed` : ""}
+          {` · ${job.progress_pct}% processed`}
           {running ? ` · ${formatEta(job.eta_seconds)}` : job.duration_ms ? ` · ${formatDuration(job.duration_ms)}` : ""}
         </p>
 
@@ -244,6 +246,9 @@ const VideoGenerationJobPanel = ({ job, onJobChange, onClose }: Props) => {
                       {row.failure_stage ? <p className="text-[10px] text-red-300">Stage: {row.failure_stage}</p> : null}
                     </div>
                   </div>
+                  {row.error && !open ? (
+                    <p className="mt-1 text-[11px] text-red-200/80 truncate">{row.error}</p>
+                  ) : null}
                   {row.error ? (
                     <button
                       type="button"

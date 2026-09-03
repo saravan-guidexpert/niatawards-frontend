@@ -630,7 +630,8 @@ export const adminGetTeacherPortraitPhones = (opts: {
   }>(`/api/admin/teacher-portraits?${params.toString()}`);
 };
 
-const GENERATE_TIMEOUT_MS = 5 * 60 * 1000;
+// gpt-image-2 takes ~2 minutes per portrait and the server retries transient failures twice.
+const GENERATE_TIMEOUT_MS = 10 * 60 * 1000;
 
 export const adminGenerateTeacherPortrait = (payload: {
   phone: string;
@@ -652,6 +653,16 @@ export const adminRegenerateTeacherPortrait = (phone: string, source_nomination_
       signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS),
     }
   );
+
+export type GenerationReadiness = {
+  video_ready: boolean;
+  video_error: string | null;
+  portrait_ready: boolean;
+  portrait_error: string | null;
+};
+
+export const adminGetGenerationReadiness = () =>
+  adminRequest<GenerationReadiness>("/api/admin/video-generation/readiness");
 
 export type VideoGenerationJobView = {
   job_id: string;

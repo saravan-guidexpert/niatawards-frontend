@@ -32,9 +32,11 @@ import {
   adminGetTeacherPortraitSummary,
   adminGetTeacherPortraits,
   adminGetVideoGenerationJobs,
+  adminGetGenerationReadiness,
   adminRegenerateTeacherPortrait,
   adminStartVideoGeneration,
   adminGetTeacherVideoPreview,
+  type GenerationReadiness,
   type TeacherPortraitCategorySummary,
   type TeacherPortraitGenerateResult,
   type TeacherPortraitKindSummary,
@@ -174,9 +176,11 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [chosenSource, setChosenSource] = useState<Record<string, string>>({});
+  const [readiness, setReadiness] = useState<GenerationReadiness | null>(null);
 
   const category = IMAGE_MANAGEMENT_CATEGORIES.find((c) => c.id === categoryId) || IMAGE_MANAGEMENT_CATEGORIES[0];
   const withPhoto = category.photo === "with_photo";
+  const blockedReason = isVideos ? readiness?.video_error : readiness?.portrait_error;
   const summaryFor = useMemo(() => new Map(summary.map((row) => [row.id, row])), [summary]);
 
   const jobCounts = useMemo(() => {
@@ -240,6 +244,9 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   useEffect(() => {
     void loadSummary();
     if (isVideos) void loadJobs();
+    adminGetGenerationReadiness()
+      .then(setReadiness)
+      .catch(() => setReadiness(null));
   }, [loadSummary, loadJobs, isVideos]);
 
   useEffect(() => {
@@ -699,6 +706,18 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
           ) : null}
         </div>
       </div>
+
+      {blockedReason ? (
+        <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-red-300 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-red-200">
+              {isVideos ? "Video generation is blocked" : "Photo generation is blocked"}
+            </p>
+            <p className="text-xs text-red-200/70 mt-0.5">{blockedReason}</p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid lg:grid-cols-3 gap-3">
         {GROUPS.map((group) => {
