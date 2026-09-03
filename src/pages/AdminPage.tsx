@@ -32,6 +32,7 @@ import TeacherVideoReviewPanel from "@/components/admin/TeacherVideoReviewPanel"
 import WhatsAppOpsPanel from "@/components/admin/WhatsAppOpsPanel";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { adminTabLabel, isTabAllowed, type AdminTab } from "@/lib/adminNav";
+import { copyTextWithFallback } from "@/lib/copyText";
 import {
   allowedAdminTabs,
   firstAllowedTab,
@@ -227,49 +228,6 @@ const nominationsToCsv = (rows: any[]) =>
   nominationSheet(rows)
     .map((row) => row.map((v) => `"${flattenCell(v).replace(/"/g, '""')}"`).join(","))
     .join("\n");
-
-const copyViaTextarea = (text: string) => {
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  ta.setAttribute("readonly", "");
-  ta.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0";
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  ta.setSelectionRange(0, ta.value.length);
-  let ok = false;
-  try {
-    ok = document.execCommand("copy");
-  } catch {
-    ok = false;
-  }
-  document.body.removeChild(ta);
-  return ok;
-};
-
-const downloadTextFile = (filename: string, text: string) => {
-  const blob = new Blob([text], { type: "text/tab-separated-values;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
-};
-
-const copyTextWithFallback = async (text: string, filename: string): Promise<"copied" | "downloaded"> => {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return "copied";
-    }
-  } catch {
-    /* fall through to execCommand / download */
-  }
-  if (copyViaTextarea(text)) return "copied";
-  downloadTextFile(filename, text);
-  return "downloaded";
-};
 
 const MODAL_PAGE_SIZE = 50;
 

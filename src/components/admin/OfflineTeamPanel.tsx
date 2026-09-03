@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import UniqueTeachersPanel from "@/components/admin/UniqueTeachersPanel";
+import { copyTextWithFallback } from "@/lib/copyText";
 import {
   OFFLINE_REGIONS,
   REGION_LABELS,
@@ -149,10 +150,29 @@ const OfflineTeamPanel = ({ nominations, onView }: Props) => {
     }
     const tsv = [COPY_HEADERS, ...visible.map(memberCells)].map((row) => row.map(flattenCell).join("\t")).join("\n");
     try {
-      await navigator.clipboard.writeText(tsv);
-      toast({ title: `Copied ${visible.length} team member${visible.length !== 1 ? "s" : ""}` });
+      const result = await copyTextWithFallback(tsv, "offline-team.tsv");
+      if (result === "copied") {
+        toast({ title: `Copied ${visible.length} team member${visible.length !== 1 ? "s" : ""}` });
+      } else {
+        toast({
+          title: `Downloaded ${visible.length} team member${visible.length !== 1 ? "s" : ""}`,
+          description: "Clipboard was too large or blocked, so a TSV file was saved instead.",
+        });
+      }
     } catch {
-      toast({ title: "Copy failed", description: "Could not access the clipboard.", variant: "destructive" });
+      toast({ title: "Copy failed", description: "Could not copy or download the list.", variant: "destructive" });
+    }
+  };
+
+  const copyLink = async (url: string, name: string) => {
+    try {
+      const result = await copyTextWithFallback(url, `${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-utm.txt`);
+      toast({
+        title: result === "copied" ? "Link copied" : "Link downloaded",
+        description: result === "copied" ? name : "Clipboard was blocked, so the link was saved as a file.",
+      });
+    } catch {
+      toast({ title: "Copy failed", description: "Could not copy this UTM link.", variant: "destructive" });
     }
   };
 
@@ -378,6 +398,16 @@ const OfflineTeamPanel = ({ nominations, onView }: Props) => {
                       <GraduationCap className="w-3 h-3" />
                       <span className="hidden xl:inline">View unique teachers</span>
                       <span className="xl:hidden">Unique</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="hero-outline"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      title="Copy UTM link"
+                      onClick={() => void copyLink(row.url, row.name)}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
                     </Button>
                     <a
                       href={row.url}

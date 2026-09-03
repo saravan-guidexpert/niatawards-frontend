@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cloudinaryDisplayUrl } from "@/lib/cloudinaryUrl";
+import { copyTextWithFallback } from "@/lib/copyText";
 
 // A teacher nominating a colleague is stored as a student-type row, so the
 // education field is the only thing separating it from a real student entry.
@@ -311,10 +312,17 @@ const UniqueTeachersPanel = ({
       .map((row) => row.map(flattenCell).join("\t"))
       .join("\n");
     try {
-      await navigator.clipboard.writeText(tsv);
-      toast({ title: `Copied ${visible.length} teacher${visible.length !== 1 ? "s" : ""}` });
+      const result = await copyTextWithFallback(tsv, "unique-teachers.tsv");
+      if (result === "copied") {
+        toast({ title: `Copied ${visible.length} teacher${visible.length !== 1 ? "s" : ""}` });
+      } else {
+        toast({
+          title: `Downloaded ${visible.length} teacher${visible.length !== 1 ? "s" : ""}`,
+          description: "Clipboard was too large or blocked, so a TSV file was saved instead.",
+        });
+      }
     } catch {
-      toast({ title: "Copy failed", description: "Could not access the clipboard.", variant: "destructive" });
+      toast({ title: "Copy failed", description: "Could not copy or download the list.", variant: "destructive" });
     }
   };
 
@@ -374,7 +382,7 @@ const UniqueTeachersPanel = ({
               <p className="text-xs text-primary-foreground/40 mt-1">{subtitle}</p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
-              <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={copyAll}>
+              <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={() => void copyAll()}>
                 <Copy className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Copy</span>
               </Button>
