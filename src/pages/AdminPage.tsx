@@ -7,7 +7,7 @@ import {
   CheckCircle2, Eye, BarChart3, Star,
   Loader2, RefreshCw, Pencil, X, Save,
   Calendar as CalendarIcon, Copy, ImageOff, Globe2,
-  Hourglass, Trash2,
+  Hourglass, Trash2, Table2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ import AfterSessionNominationsPanel from "@/components/admin/AfterSessionNominat
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { adminTabLabel, isTabAllowed, type AdminTab } from "@/lib/adminNav";
 import { copyTextWithFallback } from "@/lib/copyText";
+import { memberForNomination } from "@/lib/offlineTeamRoster";
 import {
   allowedAdminTabs,
   firstAllowedTab,
@@ -250,6 +251,52 @@ const prettyUtm = (value: string) => {
   return map[v.toLowerCase()] || v.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
+const decodeUtmValue = (value: unknown) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, " ")).trim();
+  } catch {
+    return raw.replace(/\+/g, " ").trim();
+  }
+};
+
+const utmLinkName = (n: any) => {
+  const member = memberForNomination(n);
+  if (member?.name) return member.name;
+  const content = decodeUtmValue(n?.utm_content);
+  if (content) return content;
+  const medium = String(n?.utm_medium || "").trim();
+  if (medium) return prettyUtm(medium);
+  const campaign = String(n?.utm_campaign || "").trim();
+  if (campaign) return campaign;
+  return "Direct / Organic";
+};
+
+const LEAD_DETAILS_COPY_COLUMNS: CopyColumn[] = [
+  { header: "Teacher", value: displayName },
+  { header: "Student", key: "student_name" },
+  { header: "School", key: "school_name" },
+  { header: "Teacher Phone", key: "phone" },
+  { header: "User Phone", key: "nominator_phone" },
+  { header: "Status", key: "status" },
+  { header: "UTM Link Name", value: utmLinkName },
+  { header: "UTM Source", key: "utm_source" },
+  { header: "UTM Medium", key: "utm_medium" },
+  { header: "UTM Campaign", key: "utm_campaign" },
+  { header: "UTM Term", key: "utm_term" },
+  { header: "UTM Content", key: "utm_content" },
+  { header: "Date", key: "created_at", value: (n) => (n.created_at ? formatDateTimeIn(n.created_at) : "") },
+];
+
+const leadDetailsToTsv = (rows: any[]) =>
+  [
+    LEAD_DETAILS_COPY_COLUMNS.map((c) => c.header),
+    ...rows.map((n) => LEAD_DETAILS_COPY_COLUMNS.map((c) => flattenCell(cellValue(c, n)))),
+  ]
+    .map((row) => row.join("\t"))
+    .join("\n");
+
 const utmChipClass = (source: string) => {
   const k = source.toLowerCase();
   if (k.includes("facebook") || k === "fb") return "bg-blue-500/15 text-blue-300 border-blue-500/25";
@@ -438,6 +485,7 @@ const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: 
       <p className="text-[10px] uppercase tracking-wider text-white/35 mb-2">Campaign attribution</p>
       {hasUtm(n) ? (
         <div className="grid grid-cols-2 gap-2 text-xs">
+          <p className="text-white/40 col-span-2">UTM link: <span className="text-white/85">{utmLinkName(n)}</span></p>
           <p className="text-white/40">Source: <span className="text-white/85">{prettyUtm(n.utm_source || "direct")}</span></p>
           <p className="text-white/40">Medium: <span className="text-white/85">{n.utm_medium ? prettyUtm(n.utm_medium) : "—"}</span></p>
           <p className="text-white/40 col-span-2">Campaign: <span className="text-white/85">{n.utm_campaign || "—"}</span></p>
@@ -486,6 +534,7 @@ const ViewNominationsModal = ({
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [linkFilter, setLinkFilter] = useState("all");
   const [layout, setLayout] = useState<"table" | "cards">("table");
   const [detail, setDetail] = useState<any | null>(null);
   const [page, setPage] = useState(0);
@@ -499,6 +548,7 @@ const ViewNominationsModal = ({
   const subjects = useMemo(() => uniqueSorted(list.map((n) => n.subject)), [list]);
   const categories = useMemo(() => uniqueSorted(list.map((n) => n.award_category)), [list]);
   const sources = useMemo(() => uniqueSorted(list.map((n) => utmSourceKey(n))), [list]);
+  const links = useMemo(() => uniqueSorted(list.map((n) => utmLinkName(n))), [list]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -507,6 +557,7 @@ const ViewNominationsModal = ({
         const hay = [
           displayName(n), n.student_name, n.school_name, n.phone, n.nominator_name,
           n.nominator_phone, n.subject, n.special_thing, n.impact_story, n.utm_campaign,
+          n.utm_source, n.utm_medium, n.utm_content, utmLinkName(n),
         ].some((v) => String(v || "").toLowerCase().includes(q));
         if (!hay) return false;
       }
@@ -516,9 +567,10 @@ const ViewNominationsModal = ({
       if (subjectFilter !== "all" && String(n.subject || "").trim() !== subjectFilter) return false;
       if (categoryFilter !== "all" && n.award_category !== categoryFilter) return false;
       if (sourceFilter !== "all" && utmSourceKey(n) !== sourceFilter) return false;
+      if (linkFilter !== "all" && utmLinkName(n) !== linkFilter) return false;
       return true;
     });
-  }, [list, search, typeFilter, statusFilter, classFilter, subjectFilter, categoryFilter, sourceFilter]);
+  }, [list, search, typeFilter, statusFilter, classFilter, subjectFilter, categoryFilter, sourceFilter, linkFilter]);
 
   const filtersActive =
     search.trim().length > 0 ||
@@ -527,7 +579,8 @@ const ViewNominationsModal = ({
     classFilter !== "all" ||
     subjectFilter !== "all" ||
     categoryFilter !== "all" ||
-    sourceFilter !== "all";
+    sourceFilter !== "all" ||
+    linkFilter !== "all";
 
   const rowsPerPage = pageSize === "all" ? Math.max(1, filtered.length) : Number(pageSize);
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
@@ -538,7 +591,7 @@ const ViewNominationsModal = ({
 
   useEffect(() => {
     setPage(0);
-  }, [search, typeFilter, statusFilter, classFilter, subjectFilter, categoryFilter, sourceFilter, pageSize]);
+  }, [search, typeFilter, statusFilter, classFilter, subjectFilter, categoryFilter, sourceFilter, linkFilter, pageSize]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
@@ -552,6 +605,7 @@ const ViewNominationsModal = ({
     setSubjectFilter("all");
     setCategoryFilter("all");
     setSourceFilter("all");
+    setLinkFilter("all");
   };
 
   const copyAll = async () => {
@@ -678,7 +732,7 @@ const ViewNominationsModal = ({
             className="pl-9 bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9"
           />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-8 gap-2">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className={selectClass}><span className="truncate">{filterLabel(typeFilter, "All types")}</span></SelectTrigger>
             <SelectContent>
@@ -723,6 +777,13 @@ const ViewNominationsModal = ({
               {sources.map((s) => <SelectItem key={s} value={s}>{prettyUtm(s)}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={linkFilter} onValueChange={setLinkFilter}>
+            <SelectTrigger className={selectClass}><span className="truncate">{linkFilter === "all" ? "All UTM links" : linkFilter}</span></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All UTM links</SelectItem>
+              {links.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
           {filtersActive && (
             <button type="button" onClick={clearFilters} className="text-[11px] font-semibold text-secondary hover:text-secondary/80 self-center justify-self-start">
               Clear filters
@@ -749,10 +810,10 @@ const ViewNominationsModal = ({
             ))}
           </div>
         ) : (
-          <table className="w-full min-w-[980px]">
+          <table className="w-full min-w-[1280px]">
             <thead className="sticky top-0 z-10 bg-[#141414]">
               <tr className="border-b border-white/10">
-                {["Teacher", "Student", "School", "Class", "Subject", "Status", "Source", "Date", ""].map((h) => (
+                {["Teacher", "Student", "School", "Class", "Subject", "Status", "UTM link", "Source", "Medium", "Campaign", "Date", ""].map((h) => (
                   <th key={h || "action"} className="text-left text-[10px] font-semibold text-white/40 uppercase tracking-wider px-3 py-3">{h}</th>
                 ))}
               </tr>
@@ -787,7 +848,10 @@ const ViewNominationsModal = ({
                   <td className="px-3 py-2.5 text-[11px] text-white/60 max-w-[140px] truncate">{classOrExp(n) || "—"}</td>
                   <td className="px-3 py-2.5 text-xs text-white/70 whitespace-nowrap">{n.subject || "—"}</td>
                   <td className="px-3 py-2.5"><StatusBadge status={n.status} /></td>
+                  <td className="px-3 py-2.5 text-xs text-white/85 max-w-[180px] truncate" title={utmLinkName(n)}>{utmLinkName(n)}</td>
                   <td className="px-3 py-2.5"><UtmChip n={n} compact /></td>
+                  <td className="px-3 py-2.5 text-[11px] text-white/60 whitespace-nowrap">{n.utm_medium ? prettyUtm(n.utm_medium) : "—"}</td>
+                  <td className="px-3 py-2.5 text-[11px] text-white/50 max-w-[160px] truncate" title={n.utm_campaign || ""}>{n.utm_campaign || "—"}</td>
                   <td className="px-3 py-2.5 text-[11px] text-white/45 whitespace-nowrap">{n.created_at ? new Date(n.created_at).toLocaleString("en-IN") : "—"}</td>
                   <td className="px-3 py-2.5">
                     <button
@@ -1071,6 +1135,8 @@ const AdminPage = () => {
   const [viewingNoms, setViewingNoms] = useState<any[] | null>(null);
   const [viewingTitle, setViewingTitle] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null);
+  const [showUtmDetails, setShowUtmDetails] = useState(false);
+  const [copyingDetails, setCopyingDetails] = useState(false);
 
   useEffect(() => {
     if (!isAdminLoggedIn()) {
@@ -1172,6 +1238,7 @@ const AdminPage = () => {
     const haystack = [
       n.teacher_name, n.full_name, n.school_name, n.student_name,
       n.phone, n.nominator_name, n.nominator_phone,
+      n.utm_source, n.utm_medium, n.utm_campaign, n.utm_content, utmLinkName(n),
     ];
     const matchSearch = haystack.some(v => String(v || "").toLowerCase().includes(q));
     const matchCategory = categoryFilter === "All" || n.award_category === categoryFilter;
@@ -1235,7 +1302,46 @@ const AdminPage = () => {
       toast({ title: "Nothing to view", description: "No nominations match the current filters.", variant: "destructive" });
       return;
     }
+    setViewingTitle(null);
     setViewingNoms(filtered);
+  };
+
+  const openLeadDetailsAll = () => {
+    if (filtered.length === 0) {
+      toast({ title: "Nothing to view", description: "No leads match the current filters.", variant: "destructive" });
+      return;
+    }
+    setViewingTitle(`Lead details · UTM links (${filtered.length.toLocaleString("en-IN")})`);
+    setViewingNoms(filtered);
+  };
+
+  const copyLeadDetailsAll = async () => {
+    if (copyingDetails) return;
+    if (filtered.length === 0) {
+      toast({ title: "Nothing to copy", description: "No leads match the current filters.", variant: "destructive" });
+      return;
+    }
+    setCopyingDetails(true);
+    try {
+      const result = await copyTextWithFallback(leadDetailsToTsv(filtered), "lead-details.tsv");
+      if (result === "copied") {
+        toast({
+          title: copiedNominationsTitle(filtered),
+          description: "Includes teacher, phones, and the UTM link name each lead came from.",
+        });
+      } else {
+        toast({
+          title: `Downloaded ${filtered.length} lead${filtered.length !== 1 ? "s" : ""}`,
+          description: uniquePhoneCount(filtered) !== filtered.length
+            ? `${uniquePhoneCount(filtered)} unique phones. Clipboard was too large, so a TSV file was saved instead.`
+            : "Clipboard was too large, so a TSV file was saved instead.",
+        });
+      }
+    } catch {
+      toast({ title: "Copy failed", description: "Could not copy or download the lead details.", variant: "destructive" });
+    } finally {
+      setCopyingDetails(false);
+    }
   };
 
   if (!isAdminLoggedIn()) {
@@ -1498,6 +1604,14 @@ const AdminPage = () => {
                     <div className="flex flex-wrap gap-2">
                       <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={openViewAll}>
                         <Eye className="w-3.5 h-3.5" /> View all ({filtered.length.toLocaleString("en-IN")})
+                      </Button>
+                      <Button
+                        variant="hero-outline"
+                        size="sm"
+                        className="gap-1.5 text-xs h-9"
+                        onClick={() => setShowUtmDetails((open) => !open)}
+                      >
+                        <Table2 className="w-3.5 h-3.5" /> {showUtmDetails ? "Hide details" : "Details"}
                       </Button>
                       <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={() => void copyAllFiltered()}>
                         <Copy className="w-3.5 h-3.5" /> Copy all ({filtered.length.toLocaleString("en-IN")})
@@ -1769,6 +1883,115 @@ const AdminPage = () => {
                 </div>
               )}
             </motion.div>
+            {showUtmDetails && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 overflow-hidden mt-4"
+              >
+                <div className="p-4 sm:p-6 border-b border-primary-foreground/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">
+                      Lead details <span className="text-primary-foreground/40 font-normal text-sm">({filtered.length})</span>
+                    </h2>
+                    <p className="text-xs text-primary-foreground/40 mt-0.5">
+                      Teacher, student, phones, and the UTM link name each lead came from.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={openLeadDetailsAll}>
+                      <Eye className="w-3.5 h-3.5" /> View all ({filtered.length.toLocaleString("en-IN")})
+                    </Button>
+                    <Button
+                      variant="hero-outline"
+                      size="sm"
+                      className="gap-1.5 text-xs h-9"
+                      disabled={copyingDetails || filtered.length === 0}
+                      onClick={() => void copyLeadDetailsAll()}
+                    >
+                      {copyingDetails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copyingDetails ? "Copying…" : `Copy all (${filtered.length.toLocaleString("en-IN")})`}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setShowUtmDetails(false)}
+                      className="text-[11px] font-semibold text-secondary hover:text-secondary/80"
+                    >
+                      Hide details
+                    </button>
+                  </div>
+                </div>
+                {filtered.length === 0 ? (
+                  <p className="text-sm text-primary-foreground/40 py-12 text-center">No leads match the current filters.</p>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[1180px]">
+                        <thead>
+                          <tr className="border-b border-primary-foreground/10">
+                            {["Teacher", "Student", "School", "Teacher phone", "User phone", "Status", "UTM link name", "Source", "Medium", "Campaign", "Date", ""].map((h) => (
+                              <th key={h || "action"} className={`text-[10px] font-semibold text-primary-foreground/40 uppercase tracking-wider px-3 py-3 whitespace-nowrap ${h ? "text-left" : "text-right"}`}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tableRows.map((n) => (
+                            <tr key={`utm-${n.id}`} className="border-b border-primary-foreground/5 hover:bg-primary-foreground/[0.04]">
+                              <td className="px-3 py-2.5 text-sm font-medium text-primary-foreground whitespace-nowrap max-w-[160px] truncate">{displayName(n)}</td>
+                              <td className="px-3 py-2.5 text-xs text-primary-foreground/70 whitespace-nowrap">{n.student_name || "—"}</td>
+                              <td className="px-3 py-2.5 text-xs text-primary-foreground/60 max-w-[160px] truncate">{n.school_name || "—"}</td>
+                              <td className="px-3 py-2.5 text-xs text-primary-foreground/70 whitespace-nowrap">{n.phone || "—"}</td>
+                              <td className="px-3 py-2.5 text-xs text-primary-foreground/70 whitespace-nowrap">{n.nominator_phone || "—"}</td>
+                              <td className="px-3 py-2.5"><StatusBadge status={n.status} /></td>
+                              <td className="px-3 py-2.5 text-xs text-primary-foreground max-w-[200px] truncate" title={utmLinkName(n)}>{utmLinkName(n)}</td>
+                              <td className="px-3 py-2.5"><UtmChip n={n} compact /></td>
+                              <td className="px-3 py-2.5 text-[11px] text-primary-foreground/60 whitespace-nowrap">{n.utm_medium ? prettyUtm(n.utm_medium) : "—"}</td>
+                              <td className="px-3 py-2.5 text-[11px] text-primary-foreground/50 max-w-[180px] truncate" title={n.utm_campaign || ""}>{n.utm_campaign || "—"}</td>
+                              <td className="px-3 py-2.5 text-xs text-primary-foreground/40 whitespace-nowrap">{n.created_at ? formatDateIn(n.created_at) : "—"}</td>
+                              <td className="px-3 py-2.5 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setViewingTitle(`Lead details · ${utmLinkName(n)}`);
+                                    setViewingNoms([n]);
+                                  }}
+                                  className="text-[11px] font-semibold text-secondary hover:text-secondary/80"
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {filtered.length > MODAL_PAGE_SIZE && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-t border-primary-foreground/10 text-xs text-primary-foreground/50">
+                        <span>{tableRangeStart}–{tableRangeEnd} of {filtered.length.toLocaleString("en-IN")}</span>
+                        <div className="flex items-center gap-4">
+                          <button
+                            type="button"
+                            disabled={safeTablePage === 0}
+                            onClick={() => setTablePage((p) => Math.max(0, p - 1))}
+                            className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                          >
+                            Previous
+                          </button>
+                          <button
+                            type="button"
+                            disabled={safeTablePage >= tablePageCount - 1}
+                            onClick={() => setTablePage((p) => Math.min(tablePageCount - 1, p + 1))}
+                            className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            )}
           </>
             )}
           </>
