@@ -7,6 +7,7 @@ import {
   MapPin,
   Megaphone,
   MessageCircle,
+  Send,
   Shield,
   Target,
   Users,
@@ -20,6 +21,7 @@ export type AdminTab =
   | "teacher-images"
   | "video-production"
   | "videos"
+  | "teacher-video-messaging"
   | "offline"
   | "after-session";
 
@@ -27,6 +29,7 @@ export const isTabAllowed = (tab: AdminTab, allowed: Array<PanelPermission | "ac
   if (tab === "teachers" || tab === "videos" || tab === "teacher-images" || tab === "video-production") {
     return allowed.includes("nominations");
   }
+  if (tab === "teacher-video-messaging") return allowed.includes("whatsapp");
   if (tab === "after-session") {
     return allowed.includes("nominations") || allowed.includes("campaigns") || allowed.includes("digital");
   }
@@ -73,6 +76,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     label: "Operations",
     items: [
       { id: "whatsapp", label: "WhatsApp", hint: "Delivery and retries", icon: MessageCircle },
+      { id: "teacher-video-messaging", label: "Teacher Video Messaging", hint: "Queue generated videos", icon: Send },
       { id: "access", label: "Access", hint: "Staff accounts", icon: Shield },
     ],
   },

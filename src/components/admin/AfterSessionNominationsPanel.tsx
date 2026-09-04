@@ -212,7 +212,7 @@ const AfterSessionNominationsPanel = () => {
                     </td>
                     <td className="px-3 py-3">
                       {row.photo_url ? (
-                        <img src={cloudinaryDisplayUrl(row.photo_url)} alt="" className="w-10 h-10 rounded-lg object-cover border border-white/10" />
+                        <img src={cloudinaryDisplayUrl(row.photo_url, { width: 80 })} alt="" className="w-10 h-10 rounded-lg object-cover border border-white/10" />
                       ) : (
                         <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/25">
                           <ImageOff className="w-4 h-4" />
@@ -270,7 +270,7 @@ const AfterSessionNominationsPanel = () => {
                 <p className="text-white/45">Nominator <span className="text-white">{detail.nominator_display_name || "—"} · {detail.nominator_display_phone || "—"}</span></p>
               </div>
               {detail.photo_url ? (
-                <img src={cloudinaryDisplayUrl(detail.photo_url)} alt="" className="w-full max-h-64 object-contain rounded-xl border border-white/10" />
+                <img src={cloudinaryDisplayUrl(detail.photo_url, { width: 800, crop: "limit" })} alt="" className="w-full max-h-64 object-contain rounded-xl border border-white/10" />
               ) : null}
               <div className="flex flex-wrap gap-2">
                 {(["NEW", "VIEWED", "ARCHIVED"] as const).map((s) => (

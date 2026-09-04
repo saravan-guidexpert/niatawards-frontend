@@ -4,12 +4,13 @@
  */
 export function cloudinaryDisplayUrl(
   url: string,
-  opts: { width: number; height?: number; crop?: "fill" | "limit" | "fit" },
+  opts?: { width: number; height?: number; crop?: "fill" | "limit" | "fit" },
 ): string {
   if (!url || url.startsWith("blob:") || url.startsWith("data:")) return url;
   const marker = "/image/upload/";
   const i = url.indexOf(marker);
   if (i === -1 || !url.includes("res.cloudinary.com")) return url;
+  if (!opts?.width) return url;
 
   const crop = opts.crop ?? "fill";
   const parts = [`f_auto`, `q_auto`, `c_${crop}`, `w_${Math.round(opts.width)}`];

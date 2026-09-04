@@ -23,6 +23,7 @@ import {
   adminGetWhatsAppWebhooks,
   adminWhatsAppResend,
   adminWhatsAppRunRetries,
+  adminWhatsAppSendNominationVideo,
   adminWhatsAppTestSend,
   type WhatsAppDayTotals,
   type WhatsAppOpsMessage,
@@ -50,6 +51,19 @@ const EMPTY_TOTALS: WhatsAppDayTotals = {
 };
 
 const STATUS_OPTIONS = ["", "queued", "submitted", "sent", "delivered", "read", "failed", "retry_exhausted"];
+
+const VIDEO_WHATSAPP_KINDS = [
+  "student_nominated_teacher",
+  "teacher_nominated",
+  "teacher_nominated_other",
+];
+
+const nominationTypeLabel = (kind: string | null | undefined) => {
+  if (kind === "student") return "Student Nominated Teacher";
+  if (kind === "teacher") return "Teacher Nominated Teacher";
+  if (kind === "colleague") return "Teacher Nominated Other Teacher";
+  return kind || "—";
+};
 
 const DARK_CALENDAR_CLASSNAMES = {
   caption_label: "text-sm font-medium text-white",
@@ -152,6 +166,8 @@ const WhatsAppOpsPanel = () => {
   const [testKind, setTestKind] = useState("student_nominate");
   const [testParams, setTestParams] = useState("");
   const [sending, setSending] = useState(false);
+  const [videoNominationId, setVideoNominationId] = useState("");
+  const [sendingVideo, setSendingVideo] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [runningRetries, setRunningRetries] = useState(false);
 
@@ -219,7 +235,7 @@ const WhatsAppOpsPanel = () => {
   const stages = overview?.byAttempt || [];
   const kinds = overview?.kinds || [];
   const kindOptions = useMemo(
-    () => [...new Set(["student_nominate", "teacher_submit", ...kinds])],
+    () => [...new Set(["student_nominate", "teacher_submit", ...VIDEO_WHATSAPP_KINDS, ...kinds])],
     [kinds]
   );
   const nextDue = overview?.nextPromotionDueAt || null;
@@ -272,9 +288,9 @@ const WhatsAppOpsPanel = () => {
     try {
       const result = await adminWhatsAppResend(id);
       toast({
-        title: result.success ? "Resent" : "Resend recorded as failed",
+        title: result.queued || result.success ? "Queued" : "Resend recorded as failed",
         description: result.error || `status=${result.status}`,
-        variant: result.success ? "default" : "destructive",
+        variant: result.queued || result.success ? "default" : "destructive",
       });
       await load(page);
     } catch (err: unknown) {
@@ -284,11 +300,40 @@ const WhatsAppOpsPanel = () => {
     }
   };
 
+  const handleSendNominationVideo = async () => {
+    const nominationId = videoNominationId.trim();
+    if (!nominationId) {
+      toast({ title: "Nomination ID required", variant: "destructive" });
+      return;
+    }
+    setSendingVideo(true);
+    try {
+      const result = await adminWhatsAppSendNominationVideo({ nominationId });
+      toast({
+        title: result.queued ? "Nomination video queued" : "Could not queue video message",
+        description: result.templateEnvKey
+          ? `${result.nominationKind || ""} · ${result.templateEnvKey} · ${result.status}`
+          : result.error || `status=${result.status}`,
+        variant: result.queued ? "default" : "destructive",
+      });
+      setTab("messages");
+      await load(1);
+    } catch (err: unknown) {
+      toast({
+        title: "Send failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingVideo(false);
+    }
+  };
+
   const exportCsv = () => {
     const rows = [
-      ["time", "phone", "kind", "attempt", "status", "source", "error", "exclusion", "gupshupId"].join(","),
+      ["time", "teacher", "phone", "nominationType", "nominationId", "nominationVideoId", "kind", "template", "status", "gupshupId", "videoUrl", "error", "sentAt", "deliveredAt", "readAt"].join(","),
       ...messages.map((row) =>
-        [row.createdAt, row.phone, row.messageKind, row.attemptNumber, row.status, row.source, row.errorMessage, row.retryExclusionReason, row.gupshupMessageId]
+        [row.createdAt, row.teacherName, row.phone, nominationTypeLabel(row.nominationKind), row.nominationId, row.nominationVideoId, row.messageKind, row.templateIdEnvKey, row.status, row.gupshupMessageId, row.videoUrl, row.errorMessage, row.sentAt, row.deliveredAt, row.readAt]
           .map(escapeCsv)
           .join(",")
       ),
@@ -751,6 +796,26 @@ const WhatsAppOpsPanel = () => {
                 </div>
               </div>
             )}
+            {superAdmin && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
+                <p className="text-sm font-semibold text-primary-foreground">Send one nomination video</p>
+                <p className="text-xs text-primary-foreground/45">
+                  Queues a single WhatsApp video to the teacher phone on that nomination. Does not send bulk messages or After Session nominations.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs text-primary-foreground/60">Nomination ID</Label>
+                    <Input value={videoNominationId} onChange={(e) => setVideoNominationId(e.target.value)} placeholder="Production nomination UUID" />
+                  </div>
+                  <div className="flex items-end">
+                    <Button className="w-full gap-1.5" onClick={() => void handleSendNominationVideo()} disabled={sendingVideo}>
+                      {sendingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      Queue one video
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -775,29 +840,47 @@ const MessageTable = ({
       <table className="w-full text-sm">
         <thead className="bg-white/5 text-xs uppercase tracking-wide text-primary-foreground/45">
           <tr>
-            <th className="text-left px-3 py-2 font-semibold">Time</th>
-            <th className="text-left px-3 py-2 font-semibold">Phone</th>
-            <th className="text-left px-3 py-2 font-semibold">Kind</th>
-            <th className="text-left px-3 py-2 font-semibold">Attempt</th>
+            <th className="text-left px-3 py-2 font-semibold">Created</th>
+            <th className="text-left px-3 py-2 font-semibold">Teacher</th>
+            <th className="text-left px-3 py-2 font-semibold">Teacher phone</th>
+            <th className="text-left px-3 py-2 font-semibold">Nomination type</th>
+            <th className="text-left px-3 py-2 font-semibold">Nomination ID</th>
+            <th className="text-left px-3 py-2 font-semibold">Video ID</th>
+            <th className="text-left px-3 py-2 font-semibold">Video</th>
+            <th className="text-left px-3 py-2 font-semibold">Template</th>
+            <th className="text-left px-3 py-2 font-semibold">Gupshup ID</th>
             <th className="text-left px-3 py-2 font-semibold">Status</th>
-            <th className="text-left px-3 py-2 font-semibold">Error / exclusion</th>
+            <th className="text-left px-3 py-2 font-semibold">Failure</th>
+            <th className="text-left px-3 py-2 font-semibold">Sent / delivered / read</th>
             <th className="text-left px-3 py-2 font-semibold"></th>
           </tr>
         </thead>
         <tbody>
           {loading && rows.length === 0 ? (
-            <tr><td colSpan={7} className="px-3 py-10 text-center text-primary-foreground/40">Loading…</td></tr>
+            <tr><td colSpan={13} className="px-3 py-10 text-center text-primary-foreground/40">Loading…</td></tr>
           ) : rows.length === 0 ? (
-            <tr><td colSpan={7} className="px-3 py-10 text-center text-primary-foreground/40">No WhatsApp attempts for this day.</td></tr>
+            <tr><td colSpan={13} className="px-3 py-10 text-center text-primary-foreground/40">No WhatsApp attempts for this day.</td></tr>
           ) : rows.map((row) => (
             <tr key={row.id} className="border-t border-white/8">
               <td className="px-3 py-2 text-primary-foreground/70 whitespace-nowrap">{formatWhen(row.createdAt)}</td>
+              <td className="px-3 py-2 text-primary-foreground/80 max-w-[10rem] truncate" title={row.teacherName || ""}>{row.teacherName || "—"}</td>
               <td className="px-3 py-2">{row.phone}</td>
-              <td className="px-3 py-2 text-primary-foreground/70">{row.messageKind}</td>
-              <td className="px-3 py-2 text-primary-foreground/70">{row.attemptNumber}</td>
+              <td className="px-3 py-2 text-primary-foreground/70 whitespace-nowrap">{nominationTypeLabel(row.nominationKind) !== "—" ? nominationTypeLabel(row.nominationKind) : row.messageKind}</td>
+              <td className="px-3 py-2 text-primary-foreground/50 font-mono text-[11px] max-w-[9rem] truncate" title={row.nominationId || ""}>{row.nominationId || "—"}</td>
+              <td className="px-3 py-2 text-primary-foreground/50 font-mono text-[11px] max-w-[9rem] truncate" title={row.nominationVideoId || ""}>{row.nominationVideoId || "—"}</td>
+              <td className="px-3 py-2">
+                {row.videoUrl ? (
+                  <a href={row.videoUrl} target="_blank" rel="noreferrer" className="text-secondary text-xs underline">Video</a>
+                ) : "—"}
+              </td>
+              <td className="px-3 py-2 text-primary-foreground/60 text-xs max-w-[10rem] truncate" title={row.templateIdEnvKey || ""}>{row.templateIdEnvKey || "—"}</td>
+              <td className="px-3 py-2 text-primary-foreground/50 font-mono text-[11px] max-w-[9rem] truncate" title={row.gupshupMessageId || ""}>{row.gupshupMessageId || "—"}</td>
               <td className="px-3 py-2"><StatusBadge status={row.status} /></td>
               <td className="px-3 py-2 text-primary-foreground/50 max-w-xs truncate" title={row.errorMessage || row.retryExclusionReason || ""}>
                 {row.errorMessage || row.retryExclusionReason || "—"}
+              </td>
+              <td className="px-3 py-2 text-primary-foreground/50 text-[11px] whitespace-nowrap">
+                {formatWhen(row.sentAt)} / {formatWhen(row.deliveredAt)} / {formatWhen(row.readAt)}
               </td>
               <td className="px-3 py-2 text-right">
                 {canResend(row) ? (

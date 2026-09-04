@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   adminCancelVideoGenerationJob,
   adminGetVideoGenerationJob,
+  adminRetryBlockedVideoGeneration,
   adminRetryFailedVideoGeneration,
   type VideoGenerationJobItem,
   type VideoGenerationJobView,
@@ -20,6 +21,16 @@ const KIND_LABEL: Record<string, string> = {
   student: "Student Nominated Teacher",
   teacher: "Teacher Nominated Teacher",
   colleague: "Teacher Nominated Other Teacher",
+};
+
+const CATEGORY_ID_LABEL: Record<string, string> = {
+  student_without_photo: "Student Nominated Teacher — Without Photo",
+  teacher_without_photo: "Teacher Nominated Teacher — Without Photo",
+  colleague_without_photo: "Teacher Nominated Other Teacher — Without Photo",
+  student_with_photo: "Student Nominated Teacher — With Photo",
+  teacher_with_photo: "Teacher Nominated Teacher — With Photo",
+  colleague_with_photo: "Teacher Nominated Other Teacher — With Photo",
+  without_photo_all: "All 3 categories — Without Photo",
 };
 
 const formatEta = (seconds: number | null | undefined) => {
@@ -48,6 +59,7 @@ const statusDot = (status: string) => {
   if (status === "COMPLETED") return "bg-emerald-400";
   if (status === "PROCESSING") return "bg-sky-400 animate-pulse";
   if (status === "FAILED") return "bg-red-400";
+  if (status === "BLOCKED") return "bg-amber-400";
   if (status === "CANCELLED") return "bg-white/30";
   return "bg-amber-300";
 };
@@ -134,15 +146,42 @@ const VideoGenerationJobPanel = ({ job, onJobChange, onClose }: Props) => {
     }
   };
 
-  const categoryLabel = `${KIND_LABEL[String(job.kind || "")] || job.kind || "Nominations"} — ${
-    job.photo === "without_photo" ? "Without Photo" : "With Photo"
-  }`;
+  const retryBlocked = async () => {
+    setBusy(true);
+    try {
+      const data = await adminRetryBlockedVideoGeneration(job.job_id);
+      onJobChange(data.job);
+      toast({ title: `Retry job #${data.job.job_number} started` });
+    } catch (err: unknown) {
+      toast({
+        title: "Could not retry blocked",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const categoryLabel =
+    CATEGORY_ID_LABEL[String(job.category_id || "")] ||
+    `${KIND_LABEL[String(job.kind || "")] || job.kind || "Nominations"} — ${
+      job.photo === "without_photo" ? "Without Photo" : "With Photo"
+    }`;
+  const currentCategoryLabel = job.current?.category_id
+    ? CATEGORY_ID_LABEL[String(job.current.category_id)] || job.current.category_id
+    : categoryLabel;
+  const isPortraitJob = job.job_type === "portrait";
   const title =
     job.status === "cancelled"
       ? "JOB CANCELLED"
       : running
-        ? "VIDEO GENERATION IN PROGRESS"
-        : "VIDEO GENERATION";
+        ? isPortraitJob
+          ? "PORTRAIT GENERATION IN PROGRESS"
+          : "VIDEO GENERATION IN PROGRESS"
+        : isPortraitJob
+          ? "PORTRAIT GENERATION"
+          : "VIDEO GENERATION";
 
   return (
     <div className="rounded-2xl border border-secondary/30 bg-secondary/10 overflow-hidden">
@@ -154,7 +193,8 @@ const VideoGenerationJobPanel = ({ job, onJobChange, onClose }: Props) => {
               {title}
             </p>
             <p className="text-sm text-white/60 mt-1">
-              Job #{job.job_number} · {job.total.toLocaleString("en-IN")} videos · {categoryLabel}
+              Job #{job.job_number} · {job.total.toLocaleString("en-IN")} {isPortraitJob ? "teachers" : "videos"} · {categoryLabel}
+              {job.include_portraits && !isPortraitJob ? " · image + video" : ""}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -167,6 +207,11 @@ const VideoGenerationJobPanel = ({ job, onJobChange, onClose }: Props) => {
             {!running && job.failed > 0 ? (
               <Button size="sm" className="h-9 bg-secondary text-[#1a0505] font-semibold" disabled={busy} onClick={() => void retryFailed()}>
                 Retry failed ({job.failed})
+              </Button>
+            ) : null}
+            {!running && (job.blocked || 0) > 0 ? (
+              <Button variant="hero-outline" size="sm" className="text-xs h-9" disabled={busy} onClick={() => void retryBlocked()}>
+                Retry blocked when ready ({job.blocked})
               </Button>
             ) : null}
             {onClose ? (
@@ -183,17 +228,19 @@ const VideoGenerationJobPanel = ({ job, onJobChange, onClose }: Props) => {
         <p className="text-sm text-white/70">
           {job.completed.toLocaleString("en-IN")} completed
           {job.failed ? ` · ${job.failed.toLocaleString("en-IN")} failed` : ""}
+          {job.blocked ? ` · ${job.blocked.toLocaleString("en-IN")} blocked` : ""}
           {` · ${job.progress_pct}% processed`}
           {running ? ` · ${formatEta(job.eta_seconds)}` : job.duration_ms ? ` · ${formatDuration(job.duration_ms)}` : ""}
         </p>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
           {[
             { label: "Total", value: job.total, icon: Clock, tone: "text-white/80" },
             { label: "Queued", value: job.queued, icon: Clock, tone: "text-white/80" },
             { label: "Processing", value: job.processing, icon: Loader2, tone: "text-sky-300", spin: running && job.processing > 0 },
             { label: "Completed", value: job.completed, icon: CheckCircle2, tone: "text-emerald-300" },
             { label: "Failed", value: job.failed, icon: XCircle, tone: "text-red-300" },
+            { label: "Blocked", value: job.blocked || 0, icon: Clock, tone: "text-amber-300" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-white/40">
@@ -214,7 +261,18 @@ const VideoGenerationJobPanel = ({ job, onJobChange, onClose }: Props) => {
             <p className="text-[10px] uppercase tracking-wider text-white/40">Current</p>
             <p className="font-semibold text-white">{job.current.teacher_name || "Generating…"}</p>
             <p className="text-xs text-white/50 font-mono">Nomination {job.current.nomination_id}</p>
-            <p className="text-xs text-white/45">{categoryLabel} · Audio attached</p>
+            <p className="text-xs text-white/45">{currentCategoryLabel} · Audio attached{job.current.stage ? ` · ${String(job.current.stage).replace(/_/g, " ")}` : ""}</p>
+          </div>
+        ) : null}
+
+        {job.verification ? (
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-xs text-white/70 space-y-1">
+            <p className="text-[10px] uppercase tracking-wider text-white/40">Verification pass</p>
+            <p>
+              Valid {job.verification.valid} · generated {job.verification.generated} · skipped {job.verification.skipped}
+              {job.verification.remaining_invalid ? ` · remaining invalid ${job.verification.remaining_invalid}` : ""}
+              {job.verification.remaining_missing ? ` · remaining missing ${job.verification.remaining_missing}` : ""}
+            </p>
           </div>
         ) : null}
 

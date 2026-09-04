@@ -5,6 +5,7 @@ import {
   Clapperboard,
   Loader2,
   Search,
+  Sparkles,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,12 +18,14 @@ import { API_URL } from "@/lib/apiBase";
 import {
   adminGetVideoReviews,
   adminReviewVideo,
+  adminStartVideoGeneration,
   type PortraitStatus,
   type VideoReviewCounts,
   type VideoReviewItem,
   type VideoReviewCategoryStat,
 } from "@/lib/apiAdmin";
 import {
+  IMAGE_MANAGEMENT_CATEGORIES,
   exactCategoryOf,
   nominationKind,
   photoStateOf,
@@ -63,13 +66,19 @@ const FILTERS = [
   { value: "portrait_failed", label: "Failed" },
 ] as const;
 
+const GROUPS = [
+  { group: "Student nominated teacher", kind: "student" as const },
+  { group: "Teacher nominated teacher", kind: "teacher" as const },
+  { group: "Teacher nominated other teacher", kind: "colleague" as const },
+];
+
 const PORTRAIT_STATUS_LABEL: Record<PortraitStatus, string> = {
-  NOT_STARTED: "Not Started",
-  PROCESSING: "Processing",
-  READY: "Ready",
-  NEEDS_REVIEW: "Needs Review",
-  FAILED: "Failed",
-  NOT_PROVIDED: "Not Provided",
+  NOT_STARTED: "IMAGE NOT GENERATED",
+  PROCESSING: "Generating",
+  READY: "IMAGE READY",
+  NEEDS_REVIEW: "Needs review",
+  FAILED: "IMAGE GENERATION FAILED",
+  NOT_PROVIDED: "NO PHOTO REQUIRED",
 };
 
 const mediaUrl = (value: string | null | undefined) => {
@@ -136,10 +145,12 @@ const portraitFilterMatch = (item: VideoReviewItem, filter: string) => {
 };
 
 const generationLabel = (item: VideoReviewItem) => {
-  if (!item.eligible) return "Not eligible";
-  if (item.generation_status === "generated" && item.video_url) return "Generated";
-  if (item.generation_status === "failed") return "Generation failed";
-  return "Pending generation";
+  if (!item.eligible) return "NOT GENERATED";
+  if (item.generation_status === "generated" && item.video_url) return "GENERATED";
+  if (item.generation_status === "failed") return "FAILED";
+  if (item.generation_status === "queued") return "QUEUED";
+  if (item.generation_status === "processing") return "PROCESSING";
+  return "NOT GENERATED";
 };
 
 const reviewLabel = (item: VideoReviewItem) => {
@@ -274,6 +285,7 @@ const TeacherVideoReviewPanel = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<VideoReviewItem | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
 
   const load = async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -354,12 +366,44 @@ const TeacherVideoReviewPanel = () => {
     }
   };
 
+  const regenerateVideo = async (item: VideoReviewItem) => {
+    const kind =
+      item.nomination_kind || nominationKind({ type: item.nomination_type, student_class: item.student_class });
+    const photo = item.photo_state || photoStateOf(item.teacher_photo_url) || item.video_category;
+    const phone = String(item.teacher_phone || "").replace(/\D/g, "").slice(-10);
+    setRegeneratingId(item.nomination_id);
+    try {
+      const data = await adminStartVideoGeneration({
+        phones: phone.length === 10 ? [phone] : [],
+        nomination_ids: [item.nomination_id],
+        kind,
+        photo,
+        regenerate: true,
+      });
+      toast({
+        title: `Queued ${data.queued_videos} video`,
+        description: `${kind} · ${photo === "with_photo" ? "with photo" : "without photo"} · nomination ${item.nomination_id}`,
+      });
+      await load(true);
+    } catch (err: unknown) {
+      toast({
+        title: "Could not regenerate",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    } finally {
+      setRegeneratingId(null);
+    }
+  };
+
   const cards = [
     { label: "Total submitted nominations", value: counts.total },
     { label: "Student · with photo", value: counts.student_with_photo || 0 },
     { label: "Student · without photo", value: counts.student_without_photo || 0 },
     { label: "Teacher · with photo", value: counts.teacher_with_photo || 0 },
-    { label: "Colleague · with photo", value: counts.colleague_with_photo || 0 },
+    { label: "Teacher · without photo", value: counts.teacher_without_photo || 0 },
+    { label: "Other teacher · with photo", value: counts.colleague_with_photo || 0 },
+    { label: "Other teacher · without photo", value: counts.colleague_without_photo || 0 },
     { label: "Ready for Review", value: counts.ready_for_review },
     { label: "Approved", value: counts.approved },
   ];
@@ -375,7 +419,7 @@ const TeacherVideoReviewPanel = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {cards.map((stat) => (
           <div
             key={stat.label}
@@ -388,21 +432,42 @@ const TeacherVideoReviewPanel = () => {
       </div>
 
       {categoryStats.length ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {categoryStats.map((row) => (
-            <div key={row.id} className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/[0.04] p-3">
-              <p className="text-[11px] font-semibold text-primary-foreground/80">{row.label}</p>
-              <p className="text-[11px] text-primary-foreground/50 mt-1">
-                {row.nominations.toLocaleString("en-IN")} nominations · {row.unique_teachers.toLocaleString("en-IN")} unique teachers
-              </p>
-              <p className="text-[11px] text-emerald-300/80 mt-0.5">
-                Videos generated {row.videos_generated.toLocaleString("en-IN")}
-              </p>
-              <p className="text-[11px] text-primary-foreground/45">
-                Queued {row.videos_queued.toLocaleString("en-IN")}
-                {row.videos_failed ? ` · failed ${row.videos_failed}` : ""}
-                {row.identity_mismatches ? ` · ${row.identity_mismatches} preserved mismatch` : ""}
-              </p>
+        <div className="grid lg:grid-cols-3 gap-3">
+          {GROUPS.map((group) => (
+            <div key={group.kind} className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/[0.04] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-foreground/40">{group.group}</p>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {IMAGE_MANAGEMENT_CATEGORIES.filter((cat) => cat.kind === group.kind).map((cat) => {
+                  const row = categoryStats.find((stat) => stat.id === cat.id);
+                  const active = filter === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setFilter(cat.id)}
+                      className={`text-left rounded-xl border px-3 py-3 transition-colors ${
+                        active ? "border-secondary bg-secondary/15" : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                      }`}
+                    >
+                      <p className="text-xs font-semibold text-white/80">{cat.photoLabel}</p>
+                      <p className="text-lg font-heading font-bold text-white mt-1 tabular-nums">
+                        {(row?.nominations ?? 0).toLocaleString("en-IN")}
+                      </p>
+                      <p className="text-[10px] text-white/40">
+                        {(row?.unique_teachers ?? 0).toLocaleString("en-IN")} unique teachers
+                      </p>
+                      <p className="text-[10px] text-emerald-300/80 mt-0.5">
+                        Generated {(row?.videos_generated ?? 0).toLocaleString("en-IN")}
+                      </p>
+                      <p className="text-[10px] text-primary-foreground/45">
+                        Queued {(row?.videos_queued ?? 0).toLocaleString("en-IN")}
+                        {row?.videos_processing ? ` · processing ${row.videos_processing}` : ""}
+                        {row?.videos_failed ? ` · failed ${row.videos_failed}` : ""}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>
@@ -619,8 +684,15 @@ const TeacherVideoReviewPanel = () => {
                       >
                         <XCircle className="w-3 h-3" /> Reject
                       </Button>
-                      <Button variant="hero-outline" size="sm" className="h-8 text-[11px]" disabled title="Unavailable until the video renderer is implemented">
-                        Regenerate (unavailable)
+                      <Button
+                        variant="hero-outline"
+                        size="sm"
+                        className="h-8 text-[11px] gap-1"
+                        disabled={!item.eligible || regeneratingId === item.nomination_id}
+                        onClick={() => void regenerateVideo(item)}
+                      >
+                        {regeneratingId === item.nomination_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                        Regenerate
                       </Button>
                     </div>
                   </div>

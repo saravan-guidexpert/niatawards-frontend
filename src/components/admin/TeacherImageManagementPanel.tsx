@@ -12,6 +12,8 @@ import {
   Search,
   Sparkles,
   Square,
+  ChevronDown,
+  ChevronRight,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ import {
   adminGetVideoGenerationJobs,
   adminGetGenerationReadiness,
   adminRegenerateTeacherPortrait,
+  adminStartPortraitGeneration,
   adminStartVideoGeneration,
   adminGetTeacherVideoPreview,
   adminGetTeacherVideos,
@@ -60,12 +63,13 @@ const CHECKERBOARD = {
 } as const;
 
 const STATUS_LABEL: Record<PortraitAdminStatus, string> = {
-  NOT_GENERATED: "Not generated",
+  NOT_GENERATED: "IMAGE NOT GENERATED",
   GENERATING: "Generating",
-  GENERATED: "Generated",
+  GENERATED: "IMAGE READY",
+  NEEDS_VERIFICATION: "Needs verification",
   NEEDS_REVIEW: "Needs review",
-  FAILED: "Failed",
-  NO_PHOTO: "No photo",
+  FAILED: "IMAGE GENERATION FAILED",
+  NO_PHOTO: "NO PHOTO REQUIRED",
 };
 
 const VIDEO_STATUS_LABEL = {
@@ -75,6 +79,7 @@ const VIDEO_STATUS_LABEL = {
   generated: "Generated",
   processing: "Processing",
   failed: "Failed",
+  blocked: "Blocked — portrait not ready",
 } as const;
 
 type VideoStatusFilter = keyof typeof VIDEO_STATUS_LABEL;
@@ -83,6 +88,7 @@ const STATUS_CHIP: Record<PortraitAdminStatus, string> = {
   NOT_GENERATED: "bg-white/10 text-white/70 border-white/15",
   GENERATING: "bg-sky-500/15 text-sky-300 border-sky-500/25",
   GENERATED: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+  NEEDS_VERIFICATION: "bg-orange-500/15 text-orange-300 border-orange-500/25",
   NEEDS_REVIEW: "bg-amber-500/15 text-amber-300 border-amber-500/25",
   FAILED: "bg-red-500/15 text-red-300 border-red-500/25",
   NO_PHOTO: "bg-white/10 text-white/50 border-white/15",
@@ -173,6 +179,7 @@ const emptyStatus = (): Record<PortraitAdminStatus, number> => ({
   NOT_GENERATED: 0,
   GENERATING: 0,
   GENERATED: 0,
+  NEEDS_VERIFICATION: 0,
   NEEDS_REVIEW: 0,
   FAILED: 0,
   NO_PHOTO: 0,
@@ -213,6 +220,8 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   const [pageSize, setPageSize] = useState(24);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectedNoms, setSelectedNoms] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [nameByPhone, setNameByPhone] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [batch, setBatch] = useState<BatchRow[]>([]);
@@ -222,7 +231,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   const [jobHistory, setJobHistory] = useState<VideoGenerationJobView[]>([]);
   const [confirm, setConfirm] = useState<VideoGenerationEstimate | null>(null);
   const [confirmPhones, setConfirmPhones] = useState<string[]>([]);
-  const [confirmMode, setConfirmMode] = useState<"generate" | "regenerate">("generate");
+  const [confirmIncludePortraits, setConfirmIncludePortraits] = useState(false);
   const [estimating, setEstimating] = useState(false);
   const [preview, setPreview] = useState<{
     title: string;
@@ -316,11 +325,11 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
 
   useEffect(() => {
     void loadSummary();
-    if (isVideos) void loadJobs();
+    void loadJobs();
     adminGetGenerationReadiness()
       .then(setReadiness)
       .catch(() => setReadiness(null));
-  }, [loadSummary, loadJobs, isVideos]);
+  }, [loadSummary, loadJobs]);
 
   useEffect(() => {
     void loadList();
@@ -338,6 +347,8 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   useEffect(() => {
     setPage(1);
     setSelected(new Set());
+    setSelectedNoms(new Set());
+    setExpanded(new Set());
   }, [categoryId, statusFilter, search]);
 
   useEffect(() => {
@@ -362,14 +373,47 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   const selectedOnPage = pagePhones.filter((phone) => selected.has(phone));
   const allPageSelected = pagePhones.length > 0 && selectedOnPage.length === pagePhones.length;
 
-  const togglePhone = (phone: string, on: boolean, name?: string) => {
+  const nomsFor = (row: TeacherPortraitListItem) =>
+    row.nominations?.length
+      ? row.nominations
+      : (row.nomination_ids || []).map((id) => ({ id, name: row.name }));
+
+  const togglePhone = (phone: string, on: boolean, name?: string, nominationIds?: string[]) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (on) next.add(phone);
       else next.delete(phone);
       return next;
     });
+    if (nominationIds) {
+      setSelectedNoms((prev) => {
+        const next = new Set(prev);
+        for (const id of nominationIds) {
+          if (on) next.add(id);
+          else next.delete(id);
+        }
+        return next;
+      });
+    }
     if (name) setNameByPhone((prev) => ({ ...prev, [phone]: name }));
+  };
+
+  const toggleNomination = (row: TeacherPortraitListItem, nominationId: string, on: boolean) => {
+    const ids = nomsFor(row).map((n) => n.id);
+    setSelectedNoms((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(nominationId);
+      else next.delete(nominationId);
+      const anySelected = ids.some((id) => (id === nominationId ? on : next.has(id)));
+      setSelected((phones) => {
+        const copy = new Set(phones);
+        if (anySelected) copy.add(row.phone);
+        else copy.delete(row.phone);
+        return copy;
+      });
+      return next;
+    });
+    setNameByPhone((prev) => ({ ...prev, [row.phone]: row.name }));
   };
 
   const togglePage = (on: boolean) => {
@@ -378,6 +422,16 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
       for (const row of items) {
         if (on) next.add(row.phone);
         else next.delete(row.phone);
+      }
+      return next;
+    });
+    setSelectedNoms((prev) => {
+      const next = new Set(prev);
+      for (const row of items) {
+        for (const nom of nomsFor(row)) {
+          if (on) next.add(nom.id);
+          else next.delete(nom.id);
+        }
       }
       return next;
     });
@@ -401,6 +455,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
       });
       const teachers = data.teachers || (data.phones || []).map((phone) => ({ phone, name: phone }));
       setSelected(new Set(teachers.map((row) => row.phone)));
+      setSelectedNoms(new Set(teachers.flatMap((row) => row.nomination_ids || [])));
       setNameByPhone((prev) => {
         const merged = { ...prev };
         for (const row of teachers) merged[row.phone] = row.name;
@@ -457,11 +512,11 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
   };
 
   const runSelected = async (regenerate: boolean, phonesArg?: string[]) => {
-    if (!withPhoto || busy) return;
-    const phones = phonesArg || [...selected];
+    if (!withPhoto || busy) return { generated: [] as string[], failed: [] as string[] };
+    const phones = (phonesArg || [...selected]).filter((phone) => !phone.startsWith("nom:"));
     if (!phones.length) {
       toast({ title: "Select teachers first", description: "Choose one or more teachers to generate with OpenAI." });
-      return;
+      return { generated: [] as string[], failed: [] as string[] };
     }
     const queue = regenerate
       ? phones
@@ -475,7 +530,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
         title: "Already generated",
         description: "Every selected teacher already has a finalized image. Use Regenerate to call OpenAI again.",
       });
-      return;
+      return { generated: skippedFinalized, failed: [] as string[] };
     }
 
     stopRef.current = false;
@@ -489,6 +544,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
       }))
     );
     setBusy(true);
+    const generatedPhones: string[] = [...skippedFinalized];
 
     try {
       await runPool(queue, 2, async (phone) => {
@@ -507,10 +563,12 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
             : await adminGenerateTeacherPortrait({ phone, regenerate: false, source_nomination_id });
           applyResult(phone, result);
           if (result.ok && !result.skipped) {
+            generatedPhones.push(phone);
             patchBatch(phone, { status: "generated", detail: "Finalized portrait saved" });
           } else if (result.needs_review) {
             patchBatch(phone, { status: "needs_review", detail: result.reason || "Pick a source photo" });
           } else if (result.ok && result.skipped) {
+            if (result.reason === "already_finalized") generatedPhones.push(phone);
             patchBatch(phone, {
               status: result.reason === "already_finalized" ? "skipped" : result.reason === "generating" ? "generating" : "skipped",
               detail: result.reason === "already_finalized" ? "Already finalized" : result.reason || "Skipped",
@@ -536,26 +594,61 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
         title: stopRef.current ? "Queue stopped" : regenerate ? "Regenerate finished" : "Generate finished",
         description: leftover || "Live counts are in the run panel.",
       });
+      return { generated: generatedPhones, failed: [] as string[] };
     } finally {
       setBusy(false);
     }
   };
 
-  const openVideoConfirm = async (regenerate: boolean) => {
-    const phones = [...selected];
+  const startPortraitJob = async (regenerate: boolean, phonesArg?: string[]) => {
+    if (!withPhoto) return;
+    const phones = (phonesArg || [...selected]).filter((phone) => !phone.startsWith("nom:"));
     if (!phones.length) {
-      toast({ title: "Select teachers first", description: "Choose teachers, then generate nomination videos." });
+      toast({ title: "Select teachers first", description: "Choose one or more teachers to generate with OpenAI." });
       return;
     }
-    setEstimating(true);
     try {
-      const estimate = await adminEstimateVideoGeneration({
+      const data = await adminStartPortraitGeneration({
         phones,
         kind: category.kind,
         photo: category.photo,
         regenerate,
       });
+      setVideoJob(data.job);
+      await loadJobs();
+      toast({
+        title: `${data.queued_teachers.toLocaleString("en-IN")} portrait${data.queued_teachers === 1 ? "" : "s"} queued`,
+        description: "Generation continues on the backend if you leave this page.",
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Could not start portrait job",
+        description: err instanceof Error ? err.message : "Request failed",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const videoPayload = (phones: string[], regenerate: boolean, includePortraits = false) => ({
+    phones,
+    nomination_ids: selectedNoms.size ? [...selectedNoms] : undefined,
+    kind: category.kind,
+    photo: category.photo,
+    regenerate,
+    include_portraits: includePortraits,
+  });
+
+  const openVideoConfirm = async (regenerate: boolean, includePortraits = false) => {
+    const phones = [...selected];
+    if (!phones.length && !selectedNoms.size) {
+      toast({ title: "Select teachers first", description: "Choose teachers or nominations, then generate videos." });
+      return;
+    }
+    setEstimating(true);
+    try {
+      const estimate = await adminEstimateVideoGeneration(videoPayload(phones, regenerate, includePortraits));
       setConfirmMode(regenerate ? "regenerate" : "generate");
+      setConfirmIncludePortraits(includePortraits);
       setConfirmPhones(phones);
       setConfirm(estimate);
     } catch (err: unknown) {
@@ -573,18 +666,16 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
     if (!confirm) return;
     const phones = confirmPhones.length ? confirmPhones : [...selected];
     try {
-      const data = await adminStartVideoGeneration({
-        phones,
-        kind: category.kind,
-        photo: category.photo,
-        regenerate: confirmMode === "regenerate",
-      });
+      const data = await adminStartVideoGeneration(
+        videoPayload(phones, confirmMode === "regenerate", confirmIncludePortraits)
+      );
       setConfirm(null);
+      setConfirmIncludePortraits(false);
       setVideoJob(data.job);
       await loadJobs();
       toast({
         title: `${data.queued_videos.toLocaleString("en-IN")} videos queued`,
-        description: `Not ${data.teachers} teachers — one video per nomination.`,
+        description: `Not ${data.teachers} teachers — one video per nomination. The worker continues if you leave this page.`,
       });
     } catch (err: unknown) {
       toast({
@@ -593,6 +684,10 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
         variant: "destructive",
       });
     }
+  };
+
+  const runImageThenVideo = async () => {
+    await openVideoConfirm(false, true);
   };
 
   const generateOneImage = async (phone: string) => {
@@ -744,6 +839,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
     not_generated_no_photo: 0,
     processing: 0,
     failed: 0,
+    blocked: 0,
   };
   const finalizedQueue = summaryFor.get(categoryIdOf(category.kind, "with_photo"));
   const noPhotoQueue = summaryFor.get(categoryIdOf(category.kind, "without_photo"));
@@ -779,7 +875,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                 size="sm"
                 className="h-10 px-4 bg-secondary text-[#1a0505] font-semibold hover:bg-secondary/90"
                 disabled={busy || selected.size === 0}
-                onClick={() => void runSelected(false)}
+                onClick={() => void startPortraitJob(false)}
               >
                 {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                 Generate finalized images
@@ -790,7 +886,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                 size="sm"
                 className="text-xs h-10"
                 disabled={busy || selected.size === 0}
-                onClick={() => void runSelected(true)}
+                onClick={() => void startPortraitJob(true)}
               >
                 Regenerate images
               </Button>
@@ -798,6 +894,18 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
           ) : null}
           {isVideos ? (
             <>
+              {withPhoto ? (
+                <Button
+                  variant="hero-outline"
+                  size="sm"
+                  className="text-xs h-10"
+                  disabled={busy || estimating || selected.size === 0}
+                  onClick={() => void runImageThenVideo()}
+                >
+                  {busy || estimating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Generate image + video
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 className="h-10 px-4 bg-secondary text-[#1a0505] font-semibold hover:bg-secondary/90"
@@ -806,7 +914,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
               >
                 {estimating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clapperboard className="w-4 h-4" />}
                 Generate videos
-                {selected.size ? ` (${selected.size})` : ""}
+                {selectedNoms.size ? ` (${selectedNoms.size})` : selected.size ? ` (${selected.size})` : ""}
               </Button>
               <Button
                 variant="hero-outline"
@@ -876,6 +984,9 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                     {kindStats?.images_missing
                       ? ` · missing ${(kindStats.images_missing ?? 0).toLocaleString("en-IN")}`
                       : ""}
+                    {kindStats?.images_needs_verification
+                      ? ` · needs verification ${(kindStats.images_needs_verification ?? 0).toLocaleString("en-IN")}`
+                      : ""}
                   </p>
                   <p className="text-emerald-300/80">
                     Videos generated {(kindStats?.videos_generated ?? 0).toLocaleString("en-IN")}
@@ -884,6 +995,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                     Queued {(kindStats?.videos_queued ?? 0).toLocaleString("en-IN")}
                     {kindStats?.videos_processing ? ` · processing ${kindStats.videos_processing}` : ""}
                     {kindStats?.videos_failed ? ` · failed ${kindStats.videos_failed}` : ""}
+                    {kindStats?.videos_blocked ? ` · blocked ${kindStats.videos_blocked}` : ""}
                   </p>
                 </div>
               ) : null}
@@ -936,17 +1048,22 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                           Ready {readyTeachers.toLocaleString("en-IN")}
                           {readyNoms ? ` · ${readyNoms.toLocaleString("en-IN")} videos` : ""}
                         </p>
-                        {(row?.videos?.processing || row?.videos?.failed) ? (
+                        {(row?.videos?.processing || row?.videos?.failed || row?.videos?.blocked) ? (
                           <p className="text-[10px] text-white/35">
                             {row?.videos?.processing ? `${row.videos.processing} processing` : ""}
-                            {row?.videos?.processing && row?.videos?.failed ? " · " : ""}
+                            {row?.videos?.processing && (row?.videos?.failed || row?.videos?.blocked) ? " · " : ""}
                             {row?.videos?.failed ? `${row.videos.failed} failed` : ""}
+                            {row?.videos?.failed && row?.videos?.blocked ? " · " : ""}
+                            {row?.videos?.blocked ? `${row.videos.blocked} blocked` : ""}
                           </p>
                         ) : null}
                       </>
                     ) : (
                       <p className="text-[10px] text-white/35 mt-0.5">
                         Images {(row?.images_finalized ?? row?.status?.GENERATED ?? 0).toLocaleString("en-IN")} / {(row?.unique_teachers ?? 0).toLocaleString("en-IN")}
+                        {row?.images_needs_verification
+                          ? ` · ${row.images_needs_verification} verify`
+                          : ""}
                       </p>
                     )}
                   </button>
@@ -1024,7 +1141,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
             size="sm"
             className="h-9 bg-secondary text-[#1a0505] font-semibold"
             disabled={busy}
-            onClick={() => void runSelected(false)}
+            onClick={() => void startPortraitJob(false)}
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             Generate finalized images
@@ -1032,7 +1149,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
         </div>
       ) : null}
 
-      {isVideos && videoJob ? (
+      {videoJob ? (
         <VideoGenerationJobPanel
           job={videoJob}
           onJobChange={(next) => {
@@ -1047,7 +1164,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
         />
       ) : null}
 
-      {isVideos && jobHistory.length > 0 ? (
+      {(isVideos || isImages) && jobHistory.length > 0 ? (
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 space-y-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">Generation jobs</p>
           {jobHistory.slice(0, 8).map((job) => (
@@ -1233,7 +1350,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
               Select all matching ({total.toLocaleString("en-IN")})
             </button>
             {selected.size > 0 ? (
-              <button type="button" className="hover:text-white" onClick={() => setSelected(new Set())}>
+              <button type="button" className="hover:text-white" onClick={() => { setSelected(new Set()); setSelectedNoms(new Set()); }}>
                 Clear
               </button>
             ) : null}
@@ -1272,7 +1389,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                   <div className="flex items-start gap-3">
                     <Checkbox
                       checked={selected.has(row.phone)}
-                      onCheckedChange={(on) => togglePhone(row.phone, Boolean(on), row.name)}
+                      onCheckedChange={(on) => togglePhone(row.phone, Boolean(on), row.name, nomsFor(row).map((n) => n.id))}
                       className="mt-1"
                       disabled={busy}
                     />
@@ -1301,10 +1418,28 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-heading font-bold text-white truncate">{row.name || "Unnamed teacher"}</p>
-                      <p className="text-xs text-white/50">{row.phone}</p>
+                      <p className="text-xs text-white/50">{row.missing_phone ? "No usable phone" : row.phone}</p>
                       <p className="text-[11px] text-white/45 mt-1">{category.group}</p>
                       <p className="text-[11px] text-white/45">{category.photoLabel}</p>
+                      <p className="text-[11px] text-white/45">Photo: {withPhoto ? "YES" : "NO"}</p>
                       <p className="text-[11px] text-white/40 mt-1">Nominations: {row.nomination_count}</p>
+                      {isVideos && nomsFor(row).length > 0 ? (
+                        <button
+                          type="button"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-secondary"
+                          onClick={() =>
+                            setExpanded((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(row.phone)) next.delete(row.phone);
+                              else next.add(row.phone);
+                              return next;
+                            })
+                          }
+                        >
+                          {expanded.has(row.phone) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                          Select nominations
+                        </button>
+                      ) : null}
                       {isVideos ? (
                         <>
                           <p className="text-[11px] text-emerald-300/90 mt-2">
@@ -1314,6 +1449,7 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                             Not generated: {Math.max(0, videos.total - videos.generated).toLocaleString("en-IN")}
                             {videos.processing ? ` · ${videos.processing} processing` : ""}
                             {videos.failed ? ` · ${videos.failed} failed` : ""}
+                            {videos.blocked ? ` · ${videos.blocked} blocked` : ""}
                           </p>
                           {!imageReady ? (
                             <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${VIDEO_STATUS_CHIP.blocked}`}>
@@ -1352,6 +1488,23 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
                       ) : null}
                     </div>
                   </div>
+                  {isVideos && expanded.has(row.phone) ? (
+                    <div className="rounded-lg border border-white/10 bg-black/20 px-2 py-2 space-y-1.5">
+                      {nomsFor(row).map((nom) => (
+                        <label key={nom.id} className="flex items-start gap-2 text-[11px] text-white/70">
+                          <Checkbox
+                            checked={selectedNoms.has(nom.id)}
+                            onCheckedChange={(on) => toggleNomination(row, nom.id, Boolean(on))}
+                            className="mt-0.5"
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate text-white/85">{nom.name}</span>
+                            <span className="block font-mono text-white/40 break-all">{nom.id}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     {row.cropped_cloudinary_url ? (
                       <Button variant="hero-outline" size="sm" className="text-[11px] h-8" onClick={() => void openPreview(row, "image")}>
@@ -1472,16 +1625,25 @@ const TeacherImageManagementPanel = ({ mode }: { mode: PanelMode }) => {
               <p>Teachers: {confirm.teachers.toLocaleString("en-IN")}</p>
               <p>Nomination videos: {confirm.eligible_nominations.toLocaleString("en-IN")}</p>
               <p>Already generated: {confirm.already_generated.toLocaleString("en-IN")}</p>
+              {confirm.invalid_will_regenerate ? (
+                <p className="text-amber-200">
+                  Invalid existing videos to replace: {confirm.invalid_will_regenerate.toLocaleString("en-IN")}
+                </p>
+              ) : null}
               {confirm.blocked_missing_portrait ? (
                 <p className="text-amber-300">
-                  With photo — image not ready: {confirm.blocked_missing_portrait}
+                  Blocked — portrait not ready: {confirm.blocked_missing_portrait}
                 </p>
+              ) : null}
+              {confirmIncludePortraits ? (
+                <p className="text-sky-200">Missing portraits will be generated first, then videos.</p>
               ) : null}
               <p className="text-white font-semibold pt-2">
                 {confirmMode === "regenerate"
                   ? `${confirm.to_generate.toLocaleString("en-IN")} VIDEOS WILL BE REGENERATED`
                   : `${confirm.to_generate.toLocaleString("en-IN")} VIDEOS WILL BE GENERATED`}
               </p>
+              <p className="text-white/45 text-xs">Video count is nominations, not unique teachers.</p>
               <p>Audio: Attached</p>
             </div>
             <div className="flex justify-end gap-2">

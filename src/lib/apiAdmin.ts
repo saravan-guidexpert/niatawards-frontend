@@ -255,6 +255,7 @@ export type WhatsAppOpsMessage = {
   phone: string;
   messageKind: string;
   attemptNumber: number;
+  retryCount?: number;
   status: string;
   source: string;
   retrySource: string;
@@ -267,7 +268,13 @@ export type WhatsAppOpsMessage = {
   templateId: string | null;
   params: string[];
   gupshupMessageId: string | null;
+  nominationId?: string | null;
+  nominationVideoId?: string | null;
+  nominationKind?: string | null;
+  teacherName?: string | null;
+  videoUrl?: string | null;
   createdAt: string;
+  updatedAt?: string | null;
   sentAt: string | null;
   deliveredAt: string | null;
   readAt: string | null;
@@ -383,8 +390,28 @@ export const adminWhatsAppTestSend = (payload: { phone: string; kind?: string; p
     }
   );
 
+export const adminWhatsAppSendNominationVideo = (payload: {
+  nominationId?: string;
+  nominationVideoId?: string;
+  retry?: boolean;
+}) =>
+  adminRequest<{
+    ok?: boolean;
+    queued?: boolean;
+    eventId: string | null;
+    status: string;
+    error?: string;
+    nominationId?: string | null;
+    nominationVideoId?: string | null;
+    nominationKind?: string | null;
+    templateEnvKey?: string | null;
+  }>("/api/admin/whatsapp-ops/actions/send-nomination-video", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
 export const adminWhatsAppResend = (id: string) =>
-  adminRequest<{ success: boolean; eventId: string | null; status: string; error?: string }>(
+  adminRequest<{ success?: boolean; queued?: boolean; eventId: string | null; status: string; error?: string }>(
     "/api/admin/whatsapp-ops/actions/resend",
     {
       method: "POST",
@@ -400,6 +427,258 @@ export const adminWhatsAppRunRetries = () =>
     sent: number;
     elapsedMs: number;
   }>("/api/admin/whatsapp-ops/actions/run-retries", { method: "POST" });
+
+export type TeacherVideoMessageRow = {
+  nominationId: string;
+  nominationVideoId: string;
+  nominationKind: "student" | "teacher" | "colleague";
+  nominationTypeLabel: string;
+  teacherName: string;
+  teacherPhone: string;
+  isTest: boolean;
+  photoState: "with_photo" | "without_photo";
+  nominatorName: string | null;
+  videoUrl: string;
+  generationStatus: string;
+  reviewStatus: string;
+  readyForMessage: boolean;
+  templateEnvKey: string;
+  messageStatus: "ready" | "queued" | "submitted" | "sent" | "delivered" | "read" | "failed";
+  deliveryId: string | null;
+  gupshupMessageId: string | null;
+  failureReason: string | null;
+  retryCount: number;
+  generatedAt: string | null;
+  updatedAt: string | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  readAt: string | null;
+  canSend: boolean;
+  canRetry: boolean;
+  videoCount: number;
+  messagingKey: string;
+};
+
+export type TeacherVideoMessageSummary = {
+  totalGenerated: number;
+  ready: number;
+  queued: number;
+  submitted: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+};
+
+export type TeacherVideoQueuePreview = {
+  total: number;
+  ready: number;
+  alreadySent: number;
+  failed: number;
+  invalid: number;
+  duplicate: number;
+  testCount: number;
+  recipientCount: number;
+  byKind: { student: number; teacher: number; colleague: number };
+  byPhoto: { with_photo: number; without_photo: number };
+};
+
+export type TeacherVideoMatchingIds = {
+  total: number;
+  ids: string[];
+  failedIds: string[];
+  readyIds: string[];
+  testCount: number;
+  recipientCount: number;
+  alreadySent: number;
+  byKind: { student: number; teacher: number; colleague: number };
+  byPhoto: { with_photo: number; without_photo: number };
+  preview: TeacherVideoQueuePreview;
+};
+
+export type TeacherVideoQueueResult = {
+  ok: boolean;
+  queued: number;
+  skipped: number;
+  eventIds: string[];
+  campaignId?: string;
+  results: Array<{
+    nominationVideoId: string;
+    ok: boolean;
+    queued?: boolean;
+    duplicate?: boolean;
+    status: string;
+    eventId: string | null;
+    error?: string;
+  }>;
+};
+
+export const adminGetTeacherVideoMessageSummary = (opts: {
+  kind?: string;
+  photo?: string;
+  q?: string;
+  testOnly?: boolean;
+}) => {
+  const params = new URLSearchParams();
+  if (opts.kind) params.set("kind", opts.kind);
+  if (opts.photo) params.set("photo", opts.photo);
+  if (opts.q) params.set("q", opts.q);
+  if (opts.testOnly) params.set("testOnly", "1");
+  const q = params.toString();
+  return adminRequest<TeacherVideoMessageSummary>(
+    `/api/admin/teacher-video-messaging/summary${q ? `?${q}` : ""}`
+  );
+};
+
+const teacherVideoMessageParams = (opts: {
+  kind?: string;
+  photo?: string;
+  status?: string;
+  q?: string;
+  testOnly?: boolean;
+  page?: number;
+  limit?: number;
+}) => {
+  const params = new URLSearchParams();
+  if (opts.kind) params.set("kind", opts.kind);
+  if (opts.photo) params.set("photo", opts.photo);
+  if (opts.status) params.set("status", opts.status);
+  if (opts.q) params.set("q", opts.q);
+  if (opts.testOnly) params.set("testOnly", "1");
+  if (opts.page) params.set("page", String(opts.page));
+  if (opts.limit) params.set("limit", String(opts.limit));
+  return params;
+};
+
+export const adminGetTeacherVideoMessages = (opts: {
+  kind?: string;
+  photo?: string;
+  status?: string;
+  q?: string;
+  testOnly?: boolean;
+  page?: number;
+  limit?: number;
+}) => {
+  const q = teacherVideoMessageParams(opts).toString();
+  return adminRequest<{ page: number; limit: number; total: number; items: TeacherVideoMessageRow[] }>(
+    `/api/admin/teacher-video-messaging/items${q ? `?${q}` : ""}`
+  );
+};
+
+export const adminGetTeacherVideoMessageIds = (opts: {
+  kind?: string;
+  photo?: string;
+  status?: string;
+  q?: string;
+  testOnly?: boolean;
+}) => {
+  const q = teacherVideoMessageParams(opts).toString();
+  return adminRequest<TeacherVideoMatchingIds>(
+    `/api/admin/teacher-video-messaging/ids${q ? `?${q}` : ""}`
+  );
+};
+
+const teacherVideoMatchingBody = (opts: {
+  kind?: string;
+  photo?: string;
+  status?: string;
+  q?: string;
+  testOnly?: boolean;
+}) => ({
+  matching: {
+    kind: opts.kind || "",
+    photo: opts.photo || "",
+    status: opts.status || "",
+    q: opts.q || "",
+    testOnly: opts.testOnly ? "1" : "",
+  },
+});
+
+export const adminPreviewTeacherVideoQueue = (nominationVideoIds: string[]) =>
+  adminRequest<TeacherVideoQueuePreview>("/api/admin/teacher-video-messaging/preview", {
+    method: "POST",
+    body: JSON.stringify({ nominationVideoIds }),
+  });
+
+export const adminPreviewTeacherVideoMatching = (opts: {
+  kind?: string;
+  photo?: string;
+  status?: string;
+  q?: string;
+  testOnly?: boolean;
+}) =>
+  adminRequest<TeacherVideoQueuePreview>("/api/admin/teacher-video-messaging/preview", {
+    method: "POST",
+    body: JSON.stringify(teacherVideoMatchingBody(opts)),
+  });
+
+export const adminSendTeacherVideoMessage = (nominationVideoId: string, retry = false) =>
+  adminRequest<{
+    ok: boolean;
+    queued?: boolean;
+    duplicate?: boolean;
+    eventId: string | null;
+    status: string;
+    eventIds?: string[];
+    error?: string;
+  }>(
+    "/api/admin/teacher-video-messaging/send",
+    { method: "POST", body: JSON.stringify({ nominationVideoId, retry }) }
+  );
+
+export const adminQueueTeacherVideoMessages = (nominationVideoIds: string[]) =>
+  adminRequest<TeacherVideoQueueResult>("/api/admin/teacher-video-messaging/queue", {
+    method: "POST",
+    body: JSON.stringify({ nominationVideoIds }),
+  });
+
+export const adminQueueTeacherVideoMatching = (opts: {
+  kind?: string;
+  photo?: string;
+  status?: string;
+  q?: string;
+  testOnly?: boolean;
+}) =>
+  adminRequest<TeacherVideoQueueResult>("/api/admin/teacher-video-messaging/queue", {
+    method: "POST",
+    body: JSON.stringify(teacherVideoMatchingBody(opts)),
+  });
+
+export const adminRetryTeacherVideoMessages = (nominationVideoIds: string[]) =>
+  adminRequest<TeacherVideoQueueResult>("/api/admin/teacher-video-messaging/retry", {
+    method: "POST",
+    body: JSON.stringify({ nominationVideoIds }),
+  });
+
+export const adminRetryTeacherVideoMatching = (opts: {
+  kind?: string;
+  photo?: string;
+  status?: string;
+  q?: string;
+  testOnly?: boolean;
+}) =>
+  adminRequest<TeacherVideoQueueResult>("/api/admin/teacher-video-messaging/retry", {
+    method: "POST",
+    body: JSON.stringify(teacherVideoMatchingBody(opts)),
+  });
+
+export const adminGetTeacherVideoProgress = (opts: { eventIds?: string[]; campaignId?: string }) =>
+  adminRequest<{
+    total: number;
+    queued: number;
+    submitted: number;
+    sent: number;
+    delivered: number;
+    read: number;
+    failed: number;
+    pending: number;
+  }>("/api/admin/teacher-video-messaging/progress", {
+    method: "POST",
+    body: JSON.stringify({
+      eventIds: opts.eventIds || [],
+      campaignId: opts.campaignId || "",
+    }),
+  });
 
 export type PortraitStatus =
   | "NOT_STARTED"
