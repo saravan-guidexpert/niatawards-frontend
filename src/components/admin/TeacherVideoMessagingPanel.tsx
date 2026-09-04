@@ -323,12 +323,18 @@ const TeacherVideoMessagingPanel = () => {
     await selectAllMatching();
   };
 
-  const sendOne = async (row: TeacherVideoMessageRow, retry = false) => {
+  const sendOne = async (row: TeacherVideoMessageRow, retry = false, resume = false) => {
     setSendingId(row.nominationVideoId);
     try {
-      const result = await adminSendTeacherVideoMessage(row.nominationVideoId, retry || row.messageStatus === "failed");
+      const result = await adminSendTeacherVideoMessage(
+        row.nominationVideoId,
+        retry || row.messageStatus === "failed",
+        resume || row.messageStatus === "queued"
+      );
       toast({
-        title: result.queued || result.ok ? (row.isTest ? "Test message queued" : "Message queued") : "Could not send",
+        title: result.queued || result.ok
+          ? (resume || row.messageStatus === "queued" ? "Send resumed" : row.isTest ? "Test message queued" : "Message queued")
+          : "Could not send",
         description: result.error || `${row.teacherName} · ${row.isTest ? "9347763131" : row.teacherPhone}`,
         variant: result.ok || result.queued ? "default" : "destructive",
       });
@@ -709,7 +715,18 @@ const TeacherVideoMessagingPanel = () => {
                     </td>
                     <td className="px-3 py-2.5 text-zinc-300 text-[11px] whitespace-nowrap">{formatWhen(row.updatedAt)}</td>
                     <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                      {row.canRetry ? (
+                      {row.canResume ? (
+                        <Button
+                          variant="hero-outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          disabled={sendingId === row.nominationVideoId}
+                          onClick={() => setConfirmRow(row)}
+                        >
+                          {sendingId === row.nominationVideoId ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                          Resume
+                        </Button>
+                      ) : row.canRetry ? (
                         <Button
                           variant="hero-outline"
                           size="sm"
@@ -793,12 +810,14 @@ const TeacherVideoMessagingPanel = () => {
         <AlertDialogContent className="bg-[#161010] border-white/10 text-white">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirmRow?.canRetry ? "Retry this WhatsApp message?" : confirmRow?.isTest ? "Send test WhatsApp message?" : "Send this WhatsApp message?"}
+              {confirmRow?.canResume ? "Resume this queued WhatsApp message?" : confirmRow?.canRetry ? "Retry this WhatsApp message?" : confirmRow?.isTest ? "Send test WhatsApp message?" : "Send this WhatsApp message?"}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-white/60 space-y-1.5">
               <p>{confirmRow?.teacherName} · {confirmRow?.isTest ? "9347763131" : confirmRow?.teacherPhone}</p>
               <p>{confirmRow?.nominationTypeLabel} · {confirmRow?.photoState === "with_photo" ? "With photo" : "Without photo"}</p>
-              {confirmRow?.isTest ? (
+              {confirmRow?.canResume ? (
+                <p>This was accepted into the queue but never handed to Gupshup. Resume sends the same video now.</p>
+              ) : confirmRow?.isTest ? (
                 <p className="text-amber-200/90">Test destination only. Production teacher numbers are not changed.</p>
               ) : (
                 <p>This sends the existing Cloudinary video. It will not generate a new one.</p>
@@ -811,10 +830,10 @@ const TeacherVideoMessagingPanel = () => {
               disabled={busy || Boolean(sendingId)}
               onClick={(e) => {
                 e.preventDefault();
-                if (confirmRow) void sendOne(confirmRow, confirmRow.canRetry);
+                if (confirmRow) void sendOne(confirmRow, confirmRow.canRetry, confirmRow.canResume);
               }}
             >
-              {sendingId ? "Sending…" : confirmRow?.canRetry ? "Retry" : "Send"}
+              {sendingId ? "Sending…" : confirmRow?.canResume ? "Resume" : confirmRow?.canRetry ? "Retry" : "Send"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

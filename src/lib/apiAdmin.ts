@@ -455,6 +455,7 @@ export type TeacherVideoMessageRow = {
   readAt: string | null;
   canSend: boolean;
   canRetry: boolean;
+  canResume: boolean;
   videoCount: number;
   messagingKey: string;
 };
@@ -612,7 +613,7 @@ export const adminPreviewTeacherVideoMatching = (opts: {
     body: JSON.stringify(teacherVideoMatchingBody(opts)),
   });
 
-export const adminSendTeacherVideoMessage = (nominationVideoId: string, retry = false) =>
+export const adminSendTeacherVideoMessage = (nominationVideoId: string, retry = false, resume = false) =>
   adminRequest<{
     ok: boolean;
     queued?: boolean;
@@ -623,7 +624,7 @@ export const adminSendTeacherVideoMessage = (nominationVideoId: string, retry = 
     error?: string;
   }>(
     "/api/admin/teacher-video-messaging/send",
-    { method: "POST", body: JSON.stringify({ nominationVideoId, retry }) }
+    { method: "POST", body: JSON.stringify({ nominationVideoId, retry, resume }) }
   );
 
 export const adminQueueTeacherVideoMessages = (nominationVideoIds: string[]) =>
