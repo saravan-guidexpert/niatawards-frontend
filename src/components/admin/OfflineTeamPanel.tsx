@@ -6,8 +6,10 @@ import {
   ExternalLink,
   Eye,
   GraduationCap,
+  Loader2,
   MapPin,
   Search,
+  Table2,
   Users,
   X,
 } from "lucide-react";
@@ -69,6 +71,42 @@ const memberCells = (row: OfflineMemberStats) => [
   row.teachers.map((t) => t.phone).join(" | "),
 ];
 
+const DETAIL_HEADERS = [
+  "Teacher",
+  "Phone",
+  "School",
+  "Subject",
+  "Status",
+  "Nominations",
+  "Offline team",
+  "UTM medium",
+  "Region",
+  "Last nominated",
+];
+
+const formatDateIn = (value: string | null) =>
+  value ? new Date(value).toLocaleDateString("en-IN") : "—";
+
+const uniqueNoms = (noms: any[]) => {
+  const seen = new Set<string>();
+  return noms.filter((n) => {
+    const id = String(n?.id || n?._id || "");
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
+const STATUS_CHIP: Record<string, string> = {
+  winner: "bg-green-500/10 text-green-400 border-green-500/20",
+  shortlisted: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+  pending: "bg-secondary/10 text-secondary border-secondary/20",
+  rejected: "bg-destructive/10 text-destructive border-destructive/20",
+};
+
+const DETAIL_PAGE_SIZE = 50;
+
 type Props = {
   nominations: any[];
   onView: (nominations: any[], title: string) => void;
@@ -82,6 +120,10 @@ const OfflineTeamPanel = ({ nominations, onView }: Props) => {
   const [sort, setSort] = useState("teachers");
   const [openId, setOpenId] = useState<string | null>(null);
   const [teacherView, setTeacherView] = useState<{ nominations: any[]; title: string } | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [detailSearch, setDetailSearch] = useState("");
+  const [detailPage, setDetailPage] = useState(0);
+  const [copyingDetails, setCopyingDetails] = useState(false);
 
   useEffect(() => {
     if (!teacherView) return;
@@ -119,6 +161,61 @@ const OfflineTeamPanel = ({ nominations, onView }: Props) => {
       return b.teachers.length - a.teachers.length || b.nominations.length - a.nominations.length || a.name.localeCompare(b.name);
     });
   }, [filtered, sort]);
+
+  const attributedTeachers = useMemo(() => {
+    const byPhone = new Map<string, OfflineMemberStats[]>();
+    for (const row of visible) {
+      for (const teacher of row.teachers) {
+        const list = byPhone.get(teacher.phone);
+        if (list) {
+          if (!list.some((member) => member.id === row.id)) list.push(row);
+        } else {
+          byPhone.set(teacher.phone, [row]);
+        }
+      }
+    }
+    return uniqueTeachersFrom(visible).map((teacher) => {
+      const members = byPhone.get(teacher.phone) || [];
+      return {
+        ...teacher,
+        teamNames: members.map((member) => member.name).join(" | ") || "—",
+        utmMedia: members.map((member) => member.utm_medium).join(" | ") || "—",
+        regions: [...new Set(members.map((member) => REGION_LABELS[member.region]))].join(" | ") || "—",
+      };
+    });
+  }, [visible]);
+
+  const filteredDetails = useMemo(() => {
+    const q = detailSearch.trim().toLowerCase();
+    if (!q) return attributedTeachers;
+    return attributedTeachers.filter((teacher) =>
+      [teacher.name, teacher.phone, teacher.school, teacher.subject, teacher.teamNames, teacher.utmMedia, teacher.regions, ...teacher.altNames]
+        .some((value) => value.toLowerCase().includes(q)),
+    );
+  }, [attributedTeachers, detailSearch]);
+
+  useEffect(() => {
+    setDetailPage(0);
+  }, [detailSearch, search, regionFilter, activityFilter]);
+
+  const detailPageCount = Math.max(1, Math.ceil(filteredDetails.length / DETAIL_PAGE_SIZE));
+  const safeDetailPage = Math.min(detailPage, detailPageCount - 1);
+  const detailRows = filteredDetails.slice(safeDetailPage * DETAIL_PAGE_SIZE, (safeDetailPage + 1) * DETAIL_PAGE_SIZE);
+  const detailRangeStart = filteredDetails.length === 0 ? 0 : safeDetailPage * DETAIL_PAGE_SIZE + 1;
+  const detailRangeEnd = Math.min(filteredDetails.length, (safeDetailPage + 1) * DETAIL_PAGE_SIZE);
+
+  const detailCells = (teacher: (typeof attributedTeachers)[number]) => [
+    teacher.name,
+    teacher.phone,
+    teacher.school,
+    teacher.subject,
+    teacher.status,
+    teacher.nominations.length,
+    teacher.teamNames,
+    teacher.utmMedia,
+    teacher.regions,
+    formatDateIn(teacher.lastAt),
+  ];
 
   const regionStats = useMemo(
     () =>
@@ -214,6 +311,45 @@ const OfflineTeamPanel = ({ nominations, onView }: Props) => {
       regionFilter === "All" ? "Offline team" : REGION_LABELS[regionFilter],
     );
 
+  const copyDetailsAll = async () => {
+    if (copyingDetails) return;
+    if (filteredDetails.length === 0) {
+      toast({ title: "Nothing to copy", description: "No unique teachers match the current filters.", variant: "destructive" });
+      return;
+    }
+    setCopyingDetails(true);
+    const tsv = [DETAIL_HEADERS, ...filteredDetails.map(detailCells)].map((row) => row.map(flattenCell).join("\t")).join("\n");
+    try {
+      const result = await copyTextWithFallback(tsv, "offline-team-unique-teachers.tsv");
+      if (result === "copied") {
+        toast({ title: `Copied ${filteredDetails.length} unique teacher${filteredDetails.length !== 1 ? "s" : ""}` });
+      } else {
+        toast({
+          title: `Downloaded ${filteredDetails.length} unique teacher${filteredDetails.length !== 1 ? "s" : ""}`,
+          description: "Clipboard was too large or blocked, so a TSV file was saved instead.",
+        });
+      }
+    } catch {
+      toast({ title: "Copy failed", description: "Could not copy or download the unique teachers.", variant: "destructive" });
+    } finally {
+      setCopyingDetails(false);
+    }
+  };
+
+  const viewDetailsAll = () => {
+    const noms = uniqueNoms(filteredDetails.flatMap((teacher) => teacher.nominations));
+    if (noms.length === 0) {
+      toast({ title: "Nothing to view", description: "No unique teachers match the current filters.", variant: "destructive" });
+      return;
+    }
+    onView(
+      noms,
+      regionFilter === "All"
+        ? `Unique teachers · Offline team (${filteredDetails.length.toLocaleString("en-IN")})`
+        : `Unique teachers · ${REGION_LABELS[regionFilter]} (${filteredDetails.length.toLocaleString("en-IN")})`,
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -286,6 +422,15 @@ const OfflineTeamPanel = ({ nominations, onView }: Props) => {
               </p>
             </div>
             <div className="flex gap-2 flex-shrink-0">
+              <Button
+                variant="hero-outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => setShowDetails((open) => !open)}
+              >
+                <Table2 className="w-3.5 h-3.5" />
+                {showDetails ? "Hide details" : "Details"}
+              </Button>
               <Button
                 variant="hero-outline"
                 size="sm"
@@ -461,6 +606,141 @@ const OfflineTeamPanel = ({ nominations, onView }: Props) => {
           </div>
         )}
       </div>
+
+      {showDetails && (
+        <div className="rounded-xl border border-primary-foreground/10 bg-primary-foreground/5 overflow-hidden">
+          <div className="p-4 sm:p-5 border-b border-primary-foreground/10 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="font-heading text-base sm:text-lg font-bold text-primary-foreground">
+                  Unique teachers <span className="text-primary-foreground/40 font-normal text-sm">({filteredDetails.length.toLocaleString("en-IN")})</span>
+                </h2>
+                <p className="text-xs text-primary-foreground/40 mt-0.5">
+                  One row per teacher phone, with the offline-team UTM link they came from.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="hero-outline"
+                  size="sm"
+                  className="gap-1.5 text-xs h-9"
+                  disabled={filteredDetails.length === 0}
+                  onClick={viewDetailsAll}
+                >
+                  <Eye className="w-3.5 h-3.5" /> View all ({filteredDetails.length.toLocaleString("en-IN")})
+                </Button>
+                <Button
+                  variant="hero-outline"
+                  size="sm"
+                  className="gap-1.5 text-xs h-9"
+                  disabled={copyingDetails || filteredDetails.length === 0}
+                  onClick={() => void copyDetailsAll()}
+                >
+                  {copyingDetails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copyingDetails ? "Copying…" : `Copy all (${filteredDetails.length.toLocaleString("en-IN")})`}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setShowDetails(false)}
+                  className="text-[11px] font-semibold text-secondary hover:text-secondary/80"
+                >
+                  Hide details
+                </button>
+              </div>
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary-foreground/30" />
+              <Input
+                placeholder="Search teacher, phone, school, UTM, team name…"
+                value={detailSearch}
+                onChange={(e) => setDetailSearch(e.target.value)}
+                className="pl-9 w-full bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-9"
+              />
+            </div>
+          </div>
+          {filteredDetails.length === 0 ? (
+            <p className="text-sm text-primary-foreground/40 py-12 text-center">
+              {attributedTeachers.length === 0 ? "No unique teachers from these offline-team links yet." : "No unique teachers match this search."}
+            </p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1180px]">
+                  <thead>
+                    <tr className="border-b border-primary-foreground/10">
+                      {["Teacher", "Phone", "School", "Status", "Noms", "Offline team UTM", "UTM medium", "Region", "Last", ""].map((h) => (
+                        <th
+                          key={h || "action"}
+                          className={`text-[10px] font-semibold text-primary-foreground/40 uppercase tracking-wider px-3 py-3 whitespace-nowrap ${h ? "text-left" : "text-right"}`}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailRows.map((teacher) => (
+                      <tr key={teacher.phone} className="border-b border-primary-foreground/5 hover:bg-primary-foreground/[0.04]">
+                        <td className="px-3 py-2.5 text-sm font-medium text-primary-foreground max-w-[180px] truncate" title={teacher.name}>{teacher.name}</td>
+                        <td className="px-3 py-2.5 text-xs text-primary-foreground/75 whitespace-nowrap">{teacher.phone}</td>
+                        <td className="px-3 py-2.5 text-xs text-primary-foreground/60 max-w-[180px] truncate" title={teacher.school}>{teacher.school || "—"}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold border capitalize ${STATUS_CHIP[teacher.status] || "bg-white/5 text-white/50 border-white/15"}`}>
+                            {teacher.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs font-semibold text-primary-foreground">{teacher.nominations.length}</td>
+                        <td className="px-3 py-2.5 text-xs text-primary-foreground max-w-[220px] truncate" title={teacher.teamNames}>{teacher.teamNames}</td>
+                        <td className="px-3 py-2.5 text-[11px] text-primary-foreground/60 max-w-[160px] truncate" title={teacher.utmMedia}>{teacher.utmMedia}</td>
+                        <td className="px-3 py-2.5 text-[11px] text-primary-foreground/50 whitespace-nowrap">{teacher.regions}</td>
+                        <td className="px-3 py-2.5 text-xs text-primary-foreground/40 whitespace-nowrap">{formatDateIn(teacher.lastAt)}</td>
+                        <td className="px-3 py-2.5 text-right">
+                          <Button
+                            variant="hero-outline"
+                            size="sm"
+                            className="h-8 text-[11px] gap-1"
+                            onClick={() =>
+                              onView(
+                                teacher.nominations,
+                                `${teacher.name} · via ${teacher.teamNames}`,
+                              )
+                            }
+                          >
+                            <Eye className="w-3 h-3" /> View
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {filteredDetails.length > DETAIL_PAGE_SIZE && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-t border-primary-foreground/10 text-xs text-primary-foreground/50">
+                  <span>{detailRangeStart}–{detailRangeEnd} of {filteredDetails.length.toLocaleString("en-IN")}</span>
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      disabled={safeDetailPage === 0}
+                      onClick={() => setDetailPage((p) => Math.max(0, p - 1))}
+                      className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={safeDetailPage >= detailPageCount - 1}
+                      onClick={() => setDetailPage((p) => Math.min(detailPageCount - 1, p + 1))}
+                      className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {teacherView && (
         <div className="fixed inset-0 z-[80] bg-[#0f0505]/95 overflow-auto" style={{ background: "hsl(0,0%,8%)" }}>
