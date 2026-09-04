@@ -8,7 +8,8 @@ describe("admin nav", () => {
     expect(ids).toContain("offline");
     expect(ids).toContain("teacher-images");
     expect(ids).toContain("video-production");
-    expect(ADMIN_NAV_GROUPS).toHaveLength(3);
+    expect(ids).toContain("after-session");
+    expect(ADMIN_NAV_GROUPS).toHaveLength(4);
   });
 
   it("lets nomination staff open the review and offline views", () => {
@@ -16,6 +17,7 @@ describe("admin nav", () => {
     expect(isTabAllowed("teacher-images", ["nominations"])).toBe(true);
     expect(isTabAllowed("video-production", ["nominations"])).toBe(true);
     expect(isTabAllowed("offline", ["nominations"])).toBe(true);
+    expect(isTabAllowed("after-session", ["nominations"])).toBe(true);
     expect(isTabAllowed("whatsapp", ["nominations"])).toBe(false);
   });
 
@@ -29,5 +31,6 @@ describe("admin nav", () => {
     expect(adminTabLabel("campaigns")).toBe("Influencer Tracking");
     expect(adminTabLabel("teacher-images")).toBe("Teacher Photo Management");
     expect(adminTabLabel("video-production")).toBe("Video Production");
+    expect(adminTabLabel("after-session")).toBe("After Session Nominations");
   });
 });

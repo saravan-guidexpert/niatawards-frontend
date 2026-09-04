@@ -491,6 +491,7 @@ export type VideoReviewCategoryStat = {
   unique_teachers: number;
   videos_generated: number;
   videos_queued: number;
+  videos_processing?: number;
   videos_failed: number;
   identity_mismatches: number;
 };
@@ -510,6 +511,7 @@ export type PortraitAdminStatus =
   | "NOT_GENERATED"
   | "GENERATING"
   | "GENERATED"
+  | "NEEDS_VERIFICATION"
   | "NEEDS_REVIEW"
   | "FAILED"
   | "NO_PHOTO";
@@ -532,6 +534,7 @@ export type TeacherPortraitCategorySummary = {
     not_generated?: number;
     not_generated_finalized?: number;
     not_generated_no_photo?: number;
+    blocked?: number;
     teachers?: {
       generated: number;
       not_generated: number;
@@ -539,10 +542,12 @@ export type TeacherPortraitCategorySummary = {
       not_generated_no_photo?: number;
       processing: number;
       failed: number;
+      blocked?: number;
     };
   };
   images_finalized?: number;
   images_pending?: number;
+  images_needs_verification?: number;
 };
 
 export type TeacherPortraitKindSummary = {
@@ -556,10 +561,12 @@ export type TeacherPortraitKindSummary = {
   without_photo_nominations?: number;
   images_finalized?: number;
   images_missing?: number;
+  images_needs_verification?: number;
   videos_generated?: number;
   videos_queued?: number;
   videos_processing?: number;
   videos_failed?: number;
+  videos_blocked?: number;
 };
 
 export type TeacherPortraitCandidate = {
@@ -574,6 +581,7 @@ export type TeacherVideoCounts = {
   pending: number;
   processing: number;
   failed: number;
+  blocked?: number;
   total: number;
 };
 
@@ -582,8 +590,10 @@ export type TeacherPortraitListItem = {
   name: string;
   kind: "student" | "teacher" | "colleague";
   photo: "with_photo" | "without_photo";
+  missing_phone?: boolean;
   nomination_count: number;
   nomination_ids?: string[];
+  nominations?: Array<{ id: string; name: string }>;
   portrait_status: PortraitAdminStatus;
   cropped_cloudinary_url: string | null;
   source_nomination_id: string | null;
@@ -659,7 +669,7 @@ export const adminGetTeacherPortraitPhones = (opts: {
   if (opts.q) params.set("q", opts.q);
   return adminRequest<{
     phones: string[];
-    teachers: { phone: string; name: string }[];
+    teachers: { phone: string; name: string; nomination_ids?: string[]; missing_phone?: boolean }[];
     total: number;
   }>(`/api/admin/teacher-portraits?${params.toString()}`);
 };
@@ -704,6 +714,8 @@ export type VideoGenerationJobView = {
   job_number: number;
   status: "running" | "completed" | "cancelled";
   mode: "generate" | "regenerate" | "retry";
+  job_type?: "video" | "portrait" | "image_plus_video";
+  include_portraits?: boolean;
   category_id: string | null;
   kind: string | null;
   photo: string | null;
@@ -713,6 +725,7 @@ export type VideoGenerationJobView = {
   processing: number;
   completed: number;
   failed: number;
+  blocked?: number;
   cancelled: number;
   progress_pct: number;
   avg_ms: number;
@@ -723,15 +736,27 @@ export type VideoGenerationJobView = {
     teacher_phone: string;
     category_id: string;
     category_icon_filename: string | null;
+    stage?: string | null;
   } | null;
   recent: Array<{
     nomination_id: string;
     teacher_name: string;
     teacher_phone: string;
-    status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
+    status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "BLOCKED" | "CANCELLED";
     error: string | null;
     failure_stage: string | null;
   }>;
+  verification?: {
+    total: number;
+    valid: number;
+    generated: number;
+    skipped: number;
+    failed: number;
+    blocked: number;
+    remaining_invalid: number;
+    remaining_missing: number;
+    verified_at?: string;
+  } | null;
   cancel_requested: boolean;
   started_at: string | null;
   completed_at: string | null;
@@ -746,7 +771,7 @@ export type VideoGenerationJobItem = {
   teacher_phone: string;
   category_id: string;
   photo_used: boolean;
-  status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "BLOCKED" | "CANCELLED";
   failure_stage: string | null;
   error: string | null;
   started_at: string | null;
@@ -764,17 +789,21 @@ export type VideoGenerationEstimate = {
   eligible_nominations: number;
   already_generated: number;
   blocked_missing_portrait: number;
+  invalid_will_regenerate?: number;
   to_generate: number;
   regenerate: boolean;
+  include_portraits?: boolean;
   audio: string;
   audio_attached: boolean;
 };
 
 export const adminEstimateVideoGeneration = (payload: {
   phones: string[];
+  nomination_ids?: string[];
   kind: string;
   photo: string;
   regenerate?: boolean;
+  include_portraits?: boolean;
 }) =>
   adminRequest<VideoGenerationEstimate>("/api/admin/video-generation/estimate", {
     method: "POST",
@@ -783,12 +812,28 @@ export const adminEstimateVideoGeneration = (payload: {
 
 export const adminStartVideoGeneration = (payload: {
   phones: string[];
+  nomination_ids?: string[];
+  kind: string;
+  photo: string;
+  regenerate?: boolean;
+  include_portraits?: boolean;
+}) =>
+  adminRequest<{ job: VideoGenerationJobView; queued_videos: number; blocked_videos?: number; teachers: number }>(
+    "/api/admin/video-generation/jobs",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+
+export const adminStartPortraitGeneration = (payload: {
+  phones: string[];
   kind: string;
   photo: string;
   regenerate?: boolean;
 }) =>
-  adminRequest<{ job: VideoGenerationJobView; queued_videos: number; teachers: number }>(
-    "/api/admin/video-generation/jobs",
+  adminRequest<{ job: VideoGenerationJobView; queued_teachers: number }>(
+    "/api/admin/teacher-portraits/jobs",
     {
       method: "POST",
       body: JSON.stringify(payload),
@@ -813,6 +858,12 @@ export const adminGetVideoGenerationJob = (jobId: string, opts?: { items?: boole
   }>(`/api/admin/video-generation/jobs/${encodeURIComponent(jobId)}${q ? `?${q}` : ""}`);
 };
 
+export const adminStartWithoutPhotoBulkJob = () =>
+  adminRequest<{ job: VideoGenerationJobView; queued_videos: number; audit?: unknown }>(
+    "/api/admin/video-generation/jobs/without-photo-bulk",
+    { method: "POST", body: JSON.stringify({}) }
+  );
+
 export const adminCancelVideoGenerationJob = (jobId: string) =>
   adminRequest<{ job: VideoGenerationJobView }>(
     `/api/admin/video-generation/jobs/${encodeURIComponent(jobId)}/cancel`,
@@ -822,6 +873,12 @@ export const adminCancelVideoGenerationJob = (jobId: string) =>
 export const adminRetryFailedVideoGeneration = (jobId: string) =>
   adminRequest<{ job: VideoGenerationJobView }>(
     `/api/admin/video-generation/jobs/${encodeURIComponent(jobId)}/retry-failed`,
+    { method: "POST" }
+  );
+
+export const adminRetryBlockedVideoGeneration = (jobId: string) =>
+  adminRequest<{ job: VideoGenerationJobView }>(
+    `/api/admin/video-generation/jobs/${encodeURIComponent(jobId)}/retry-blocked`,
     { method: "POST" }
   );
 
@@ -861,3 +918,73 @@ export const adminGetTeacherVideos = (opts: { phone: string; kind: string; photo
     `/api/admin/video-generation/videos?${params.toString()}`
   );
 };
+
+export type AfterSessionNomination = {
+  id: string;
+  created_at: string;
+  submitted_at?: string | null;
+  lifecycle: "draft" | "submitted";
+  status: "NEW" | "VIEWED" | "ARCHIVED";
+  source_form: string;
+  form_kind?: string;
+  type: string;
+  teacher_name?: string | null;
+  full_name?: string | null;
+  student_name?: string | null;
+  nominator_name?: string | null;
+  nominator_phone?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  photo_url?: string | null;
+  has_photo?: boolean;
+  nominee_name?: string | null;
+  nominee_phone?: string | null;
+  nominator_display_name?: string | null;
+  nominator_display_phone?: string | null;
+  award_category?: string | null;
+  extra_fields?: Record<string, unknown>;
+  raw_payload?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type AfterSessionList = {
+  items: AfterSessionNomination[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+};
+
+export const adminGetAfterSessionNominations = (opts: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  type?: string;
+  source_form?: string;
+  status?: string;
+  lifecycle?: string;
+  date?: string;
+  id?: string;
+} = {}) => {
+  const params = new URLSearchParams();
+  if (opts.page) params.set("page", String(opts.page));
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.search) params.set("search", opts.search);
+  if (opts.type && opts.type !== "all") params.set("type", opts.type);
+  if (opts.source_form && opts.source_form !== "all") params.set("source_form", opts.source_form);
+  if (opts.status && opts.status !== "all") params.set("status", opts.status);
+  if (opts.lifecycle) params.set("lifecycle", opts.lifecycle);
+  if (opts.date) params.set("date", opts.date);
+  if (opts.id) params.set("id", opts.id);
+  const qs = params.toString();
+  return adminRequest<AfterSessionList>(`/api/admin/after-session-nominations${qs ? `?${qs}` : ""}`);
+};
+
+export const adminGetAfterSessionNomination = (id: string) =>
+  adminRequest<AfterSessionNomination>(`/api/admin/after-session-nominations/${encodeURIComponent(id)}`);
+
+export const adminUpdateAfterSessionStatus = (id: string, status: "NEW" | "VIEWED" | "ARCHIVED") =>
+  adminRequest<AfterSessionNomination>(`/api/admin/after-session-nominations/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });

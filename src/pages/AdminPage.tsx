@@ -30,6 +30,7 @@ import TeacherImageManagementPanel from "@/components/admin/TeacherImageManageme
 import OfflineTeamPanel from "@/components/admin/OfflineTeamPanel";
 import TeacherVideoReviewPanel from "@/components/admin/TeacherVideoReviewPanel";
 import WhatsAppOpsPanel from "@/components/admin/WhatsAppOpsPanel";
+import AfterSessionNominationsPanel from "@/components/admin/AfterSessionNominationsPanel";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { adminTabLabel, isTabAllowed, type AdminTab } from "@/lib/adminNav";
 import { copyTextWithFallback } from "@/lib/copyText";
@@ -1305,7 +1306,7 @@ const AdminPage = () => {
           <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={fetchNominations}>
             <RefreshCw className="w-3.5 h-3.5" /><span className="hidden sm:inline">Refresh</span>
           </Button>
-          {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && activeTab !== "teacher-images" && activeTab !== "video-production" && activeTab !== "videos" && activeTab !== "offline" && (
+          {activeTab !== "access" && activeTab !== "whatsapp" && activeTab !== "teachers" && activeTab !== "teacher-images" && activeTab !== "video-production" && activeTab !== "videos" && activeTab !== "offline" && activeTab !== "after-session" && (
             <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
               <Download className="w-3.5 h-3.5" /><span className="hidden sm:inline">Export CSV</span>
             </Button>
@@ -1315,7 +1316,7 @@ const AdminPage = () => {
 
       {/* Content */}
       <div className={`flex-1 py-6 sm:py-8 px-3 sm:px-5 xl:px-8 ${
-        activeTab === "nominations" || activeTab === "teachers" || activeTab === "teacher-images" || activeTab === "video-production" || activeTab === "videos" || activeTab === "offline"
+        activeTab === "nominations" || activeTab === "teachers" || activeTab === "teacher-images" || activeTab === "video-production" || activeTab === "videos" || activeTab === "offline" || activeTab === "after-session"
           ? "w-full"
           : "w-full max-w-6xl"
       }`}>
@@ -1329,6 +1330,8 @@ const AdminPage = () => {
           <TeacherImageManagementPanel mode="images" />
         ) : activeTab === "video-production" ? (
           <TeacherImageManagementPanel mode="videos" />
+        ) : activeTab === "after-session" ? (
+          <AfterSessionNominationsPanel />
         ) : activeTab === "nominations" ? (
           <>
             <FunnelAnalytics

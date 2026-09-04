@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Archive,
   Clapperboard,
   GraduationCap,
   Images,
@@ -19,11 +20,15 @@ export type AdminTab =
   | "teacher-images"
   | "video-production"
   | "videos"
-  | "offline";
+  | "offline"
+  | "after-session";
 
 export const isTabAllowed = (tab: AdminTab, allowed: Array<PanelPermission | "access">) => {
   if (tab === "teachers" || tab === "videos" || tab === "teacher-images" || tab === "video-production") {
     return allowed.includes("nominations");
+  }
+  if (tab === "after-session") {
+    return allowed.includes("nominations") || allowed.includes("campaigns") || allowed.includes("digital");
   }
   if (tab === "offline") return allowed.includes("nominations") || allowed.includes("campaigns");
   return allowed.includes(tab);
@@ -69,6 +74,18 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     items: [
       { id: "whatsapp", label: "WhatsApp", hint: "Delivery and retries", icon: MessageCircle },
       { id: "access", label: "Access", hint: "Staff accounts", icon: Shield },
+    ],
+  },
+  {
+    id: "separate",
+    label: "Separate",
+    items: [
+      {
+        id: "after-session",
+        label: "After Session Nominations",
+        hint: "Future submissions — display only",
+        icon: Archive,
+      },
     ],
   },
 ];
