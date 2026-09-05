@@ -501,6 +501,9 @@ export type TeacherVideoMatchingIds = {
 export type TeacherVideoQueueResult = {
   ok: boolean;
   queued: number;
+  submitted?: number;
+  failed?: number;
+  remaining?: number;
   skipped: number;
   eventIds: string[];
   campaignId?: string;

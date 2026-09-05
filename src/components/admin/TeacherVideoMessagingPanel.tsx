@@ -404,21 +404,36 @@ const TeacherVideoMessagingPanel = () => {
   const confirmResumeQueued = async () => {
     if (!summary.queued) return;
     setBusy(true);
+    setResumeOpen(false);
     try {
-      const result = await adminResumeTeacherVideoMatching({
-        kind,
-        photo,
-        q: search,
-        testOnly,
-        status: "queued",
-      });
-      trackCampaign(result);
-      setResumeOpen(false);
+      let submitted = 0;
+      let failed = 0;
+      let batches = 0;
+      while (batches < 250) {
+        const result = await adminResumeTeacherVideoMatching({
+          kind,
+          photo,
+          q: search,
+          testOnly,
+          status: "queued",
+        });
+        trackCampaign(result);
+        submitted += result.submitted ?? 0;
+        failed += result.failed ?? 0;
+        batches += 1;
+        await load(page, true);
+        if (!(result.queued || result.submitted) || (result.remaining ?? 0) === 0) break;
+        toast({
+          title: `Submitted ${submitted.toLocaleString("en-IN")} to Gupshup`,
+          description: `${(result.remaining ?? 0).toLocaleString("en-IN")} still queued. Keep this tab open.`,
+        });
+      }
       toast({
-        title: `Resuming ${result.queued.toLocaleString("en-IN")} queued message${result.queued === 1 ? "" : "s"}`,
-        description: "Gupshup submit has started in the background. Status will move from Queued to Submitted as each one is accepted.",
+        title: `Submitted ${submitted.toLocaleString("en-IN")} queued message${submitted === 1 ? "" : "s"}`,
+        description: failed
+          ? `${failed.toLocaleString("en-IN")} failed. Remaining queued will retry on the next resume or cron sweep.`
+          : "Queued teachers are being accepted by Gupshup. Refresh to watch Submitted rise.",
       });
-      await load(page, true);
     } catch (err: unknown) {
       toast({ title: "Resume failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
@@ -941,10 +956,10 @@ const TeacherVideoMessagingPanel = () => {
             </AlertDialogTitle>
             <AlertDialogDescription className="text-white/60 space-y-2">
               <span className="block">
-                These were accepted into the queue but never submitted to Gupshup. Resume hands each video to Gupshup in the background.
+                These were accepted into the queue but never submitted to Gupshup. Resume submits them to Gupshup in batches and keeps going until this tab finishes the queue.
               </span>
               <span className="block text-amber-200/90">
-                Current filters apply. Status will change from Queued to Submitted as Gupshup accepts each message.
+                Current filters apply. Keep this tab open. Status will change from Queued to Submitted as Gupshup accepts each message.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
