@@ -489,6 +489,7 @@ export type TeacherVideoMatchingIds = {
   ids: string[];
   failedIds: string[];
   readyIds: string[];
+  queuedIds?: string[];
   testCount: number;
   recipientCount: number;
   alreadySent: number;
@@ -661,6 +662,24 @@ export const adminRetryTeacherVideoMatching = (opts: {
   adminRequest<TeacherVideoQueueResult>("/api/admin/teacher-video-messaging/retry", {
     method: "POST",
     body: JSON.stringify(teacherVideoMatchingBody(opts)),
+  });
+
+export const adminResumeTeacherVideoMessages = (nominationVideoIds?: string[]) =>
+  adminRequest<TeacherVideoQueueResult>("/api/admin/teacher-video-messaging/resume", {
+    method: "POST",
+    body: JSON.stringify(nominationVideoIds?.length ? { nominationVideoIds } : {}),
+  });
+
+export const adminResumeTeacherVideoMatching = (opts: {
+  kind?: string;
+  photo?: string;
+  status?: string;
+  q?: string;
+  testOnly?: boolean;
+}) =>
+  adminRequest<TeacherVideoQueueResult>("/api/admin/teacher-video-messaging/resume", {
+    method: "POST",
+    body: JSON.stringify(teacherVideoMatchingBody({ ...opts, status: "queued" })),
   });
 
 export const adminGetTeacherVideoProgress = (opts: { eventIds?: string[]; campaignId?: string }) =>

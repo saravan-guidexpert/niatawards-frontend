@@ -35,6 +35,7 @@ import {
   adminPreviewTeacherVideoQueue,
   adminQueueTeacherVideoMatching,
   adminQueueTeacherVideoMessages,
+  adminResumeTeacherVideoMatching,
   adminRetryTeacherVideoMatching,
   adminRetryTeacherVideoMessages,
   adminSendTeacherVideoMessage,
@@ -174,6 +175,7 @@ const TeacherVideoMessagingPanel = () => {
   const [confirmRow, setConfirmRow] = useState<TeacherVideoMessageRow | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [retryOpen, setRetryOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const [preview, setPreview] = useState<TeacherVideoQueuePreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [eventIds, setEventIds] = useState<string[]>([]);
@@ -399,6 +401,31 @@ const TeacherVideoMessagingPanel = () => {
     }
   };
 
+  const confirmResumeQueued = async () => {
+    if (!summary.queued) return;
+    setBusy(true);
+    try {
+      const result = await adminResumeTeacherVideoMatching({
+        kind,
+        photo,
+        q: search,
+        testOnly,
+        status: "queued",
+      });
+      trackCampaign(result);
+      setResumeOpen(false);
+      toast({
+        title: `Resuming ${result.queued.toLocaleString("en-IN")} queued message${result.queued === 1 ? "" : "s"}`,
+        description: "Gupshup submit has started in the background. Status will move from Queued to Submitted as each one is accepted.",
+      });
+      await load(page, true);
+    } catch (err: unknown) {
+      toast({ title: "Resume failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const failedSelectedCount = selectedFailed.size;
   const confirmRetry = async () => {
     const ids = [...selectedFailed];
@@ -467,9 +494,21 @@ const TeacherVideoMessagingPanel = () => {
             One WhatsApp message per teacher per nomination type. Extra videos for the same teacher and type are not sent.
           </p>
         </div>
-        <Button variant="hero-outline" size="sm" className="gap-1.5" onClick={() => void load(page)}>
-          <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="hero-outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={busy || summary.queued === 0}
+            onClick={() => setResumeOpen(true)}
+          >
+            <Send className="w-3.5 h-3.5" />
+            Resume queued ({summary.queued.toLocaleString("en-IN")})
+          </Button>
+          <Button variant="hero-outline" size="sm" className="gap-1.5" onClick={() => void load(page)}>
+            <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="sticky top-14 z-20 rounded-xl border border-secondary/20 bg-[#1a1010]/95 backdrop-blur px-4 py-3 space-y-3">
@@ -889,6 +928,30 @@ const TeacherVideoMessagingPanel = () => {
             <AlertDialogCancel className="bg-transparent border-white/20 text-white">Cancel</AlertDialogCancel>
             <AlertDialogAction disabled={busy} onClick={(e) => { e.preventDefault(); void confirmRetry(); }}>
               {busy ? "Retrying…" : "Retry failed"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={resumeOpen} onOpenChange={setResumeOpen}>
+        <AlertDialogContent className="bg-[#161010] border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Resume {summary.queued.toLocaleString("en-IN")} queued WhatsApp message{summary.queued === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-white/60 space-y-2">
+              <span className="block">
+                These were accepted into the queue but never submitted to Gupshup. Resume hands each video to Gupshup in the background.
+              </span>
+              <span className="block text-amber-200/90">
+                Current filters apply. Status will change from Queued to Submitted as Gupshup accepts each message.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-white/20 text-white">Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={busy || summary.queued === 0} onClick={(e) => { e.preventDefault(); void confirmResumeQueued(); }}>
+              {busy ? "Resuming…" : `Resume ${summary.queued.toLocaleString("en-IN")}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
