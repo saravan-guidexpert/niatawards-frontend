@@ -443,18 +443,42 @@ const TeacherVideoMessagingPanel = () => {
 
   const failedSelectedCount = selectedFailed.size;
   const confirmRetry = async () => {
-    const ids = [...selectedFailed];
-    if (!ids.length) return;
+    if (!failedSelectedCount && !summary.failed) return;
     setBusy(true);
+    setRetryOpen(false);
     try {
-      const result = allMatchingSelected && matching
-        ? await adminRetryTeacherVideoMatching(matching.filters)
-        : await adminRetryTeacherVideoMessages(ids);
-      trackCampaign(result);
-      setRetryOpen(false);
+      let submitted = 0;
+      let failedAgain = 0;
+      let batches = 0;
+      while (batches < 250) {
+        const selectedOnly = batches === 0 && failedSelectedCount > 0 && !allMatchingSelected;
+        const result = selectedOnly
+          ? await adminRetryTeacherVideoMessages([...selectedFailed])
+          : await adminRetryTeacherVideoMatching({
+              kind,
+              photo,
+              q: search,
+              testOnly,
+              status: "failed",
+            });
+        trackCampaign(result);
+        submitted += result.submitted ?? result.queued ?? 0;
+        failedAgain += result.failed ?? 0;
+        batches += 1;
+        await load(page, true);
+        if (!(result.queued || result.submitted)) break;
+        toast({
+          title: `Retried ${submitted.toLocaleString("en-IN")} failed message${submitted === 1 ? "" : "s"}`,
+          description: "Keep this tab open. Opt-outs and numbers not on WhatsApp are skipped.",
+        });
+      }
       clearSelection();
-      toast({ title: `Retrying ${result.queued.toLocaleString("en-IN")} failed message${result.queued === 1 ? "" : "s"}` });
-      await load(page, true);
+      toast({
+        title: `Retried ${submitted.toLocaleString("en-IN")} failed message${submitted === 1 ? "" : "s"}`,
+        description: failedAgain
+          ? `${failedAgain.toLocaleString("en-IN")} failed again. Permanent numbers will stay failed.`
+          : "Gupshup accepted the recoverable retries.",
+      });
     } catch (err: unknown) {
       toast({ title: "Retry failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
@@ -519,6 +543,16 @@ const TeacherVideoMessagingPanel = () => {
           >
             <Send className="w-3.5 h-3.5" />
             Resume queued ({summary.queued.toLocaleString("en-IN")})
+          </Button>
+          <Button
+            variant="hero-outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={busy || summary.failed === 0}
+            onClick={() => setRetryOpen(true)}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Retry failed ({summary.failed.toLocaleString("en-IN")})
           </Button>
           <Button variant="hero-outline" size="sm" className="gap-1.5" onClick={() => void load(page)}>
             <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
@@ -934,15 +968,17 @@ const TeacherVideoMessagingPanel = () => {
       <AlertDialog open={retryOpen} onOpenChange={setRetryOpen}>
         <AlertDialogContent className="bg-[#161010] border-white/10 text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle>Retry {failedSelectedCount} failed messages?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Retry {(failedSelectedCount || summary.failed).toLocaleString("en-IN")} failed message{(failedSelectedCount || summary.failed) === 1 ? "" : "s"}?
+            </AlertDialogTitle>
             <AlertDialogDescription className="text-white/60">
-              Only failed deliveries are retried. The same video URL is reused. Delivered and read messages are not retried, except the test number.
+              Recoverable failures are sent to Gupshup again using the same video. Opt-outs and numbers that are not on WhatsApp are skipped. Delivered and read messages are not retried, except the test number.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-white/20 text-white">Cancel</AlertDialogCancel>
-            <AlertDialogAction disabled={busy} onClick={(e) => { e.preventDefault(); void confirmRetry(); }}>
-              {busy ? "Retrying…" : "Retry failed"}
+            <AlertDialogAction disabled={busy || (!failedSelectedCount && !summary.failed)} onClick={(e) => { e.preventDefault(); void confirmRetry(); }}>
+              {busy ? "Retrying…" : `Retry ${(failedSelectedCount || summary.failed).toLocaleString("en-IN")}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
