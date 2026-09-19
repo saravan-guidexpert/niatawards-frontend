@@ -7,8 +7,18 @@ import {
   CheckCircle2, Eye, BarChart3, Star,
   Loader2, RefreshCw, Pencil, X, Save,
   Calendar as CalendarIcon, Copy, ImageOff, Globe2,
-  Hourglass, Trash2,
+  Hourglass, Trash2, FileSpreadsheet, Phone,
+  MessageCircle, ListChecks, ChevronDown, Maximize2,
+  LayoutGrid, Table as TableIcon,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,6 +42,7 @@ import TeacherVideoReviewPanel from "@/components/admin/TeacherVideoReviewPanel"
 import WhatsAppOpsPanel from "@/components/admin/WhatsAppOpsPanel";
 import TeacherVideoMessagingPanel from "@/components/admin/TeacherVideoMessagingPanel";
 import AfterSessionNominationsPanel from "@/components/admin/AfterSessionNominationsPanel";
+import FdpRegistrationsPanel from "@/components/admin/FdpRegistrationsPanel";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { adminTabLabel, isTabAllowed, type AdminTab } from "@/lib/adminNav";
 import { copyTextWithFallback } from "@/lib/copyText";
@@ -490,6 +501,286 @@ const NominationDetailCard = ({ n, onPhotoClick }: { n: any; onPhotoClick?: (n: 
 const uniqueSorted = (values: (string | undefined | null)[]) =>
   Array.from(new Set(values.map((v) => String(v || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
+interface NominationCopyDropdownProps {
+  rows: any[];
+  className?: string;
+  align?: "start" | "end" | "center";
+  label?: string;
+}
+
+const NominationCopyDropdown: React.FC<NominationCopyDropdownProps> = ({
+  rows,
+  className = "",
+  align = "end",
+  label,
+}) => {
+  const { toast } = useToast();
+  const [copying, setCopying] = useState(false);
+
+  const getPhones = () => {
+    const seen = new Set<string>();
+    const phones: string[] = [];
+    const contacts: { name: string; phone: string; school?: string; subject?: string }[] = [];
+
+    for (const n of rows) {
+      const raw = String(n.phone || n.nominator_phone || "").replace(/\D/g, "");
+      const clean = raw.length >= 10 ? raw.slice(-10) : "";
+      if (clean.length === 10 && !seen.has(clean)) {
+        seen.add(clean);
+        phones.push(clean);
+        contacts.push({
+          name: displayName(n),
+          phone: clean,
+          school: n.school_name || undefined,
+          subject: n.subject || undefined,
+        });
+      }
+    }
+    return { phones, contacts };
+  };
+
+  const copyTsv = async () => {
+    if (rows.length === 0) {
+      toast({ title: "Nothing to copy", description: "No nominations match current filters.", variant: "destructive" });
+      return;
+    }
+    setCopying(true);
+    try {
+      const tsv = nominationsToTsv(rows);
+      const res = await copyTextWithFallback(tsv, "nominations.tsv");
+      if (res === "copied") {
+        toast({
+          title: `Copied ${rows.length.toLocaleString("en-IN")} records for Excel / Sheets!`,
+          description: "Tab-separated rows copied. Paste directly into Excel or Google Sheets to populate columns.",
+        });
+      } else {
+        toast({
+          title: `Downloaded nominations.tsv (${rows.length.toLocaleString("en-IN")} records)`,
+          description: "Clipboard limit exceeded; saved as a TSV file instead.",
+        });
+      }
+    } catch {
+      toast({ title: "Failed to copy table", variant: "destructive" });
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const copyPhones = async (format: "comma" | "lines") => {
+    if (rows.length === 0) {
+      toast({ title: "Nothing to copy", description: "No nominations match current filters.", variant: "destructive" });
+      return;
+    }
+    setCopying(true);
+    try {
+      const { phones } = getPhones();
+      if (phones.length === 0) {
+        toast({ title: "No valid 10-digit phone numbers found", variant: "destructive" });
+        return;
+      }
+      const text = format === "comma" ? phones.join(", ") : phones.join("\n");
+      await copyTextWithFallback(text, `nominations-phones-${format}.txt`);
+      toast({
+        title: `Copied ${phones.length.toLocaleString("en-IN")} Phone Numbers!`,
+        description:
+          format === "comma"
+            ? "Comma-separated list ready for bulk SMS broadcasts (MSG91)."
+            : "1 number per line copied for dialers and calling lists.",
+      });
+    } catch {
+      toast({ title: "Failed to copy phone numbers", variant: "destructive" });
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const copyWhatsApp = async () => {
+    if (rows.length === 0) {
+      toast({ title: "Nothing to copy", description: "No nominations match current filters.", variant: "destructive" });
+      return;
+    }
+    setCopying(true);
+    try {
+      const { contacts } = getPhones();
+      if (contacts.length === 0) {
+        toast({ title: "No phone numbers found", variant: "destructive" });
+        return;
+      }
+      const links = contacts
+        .map(
+          (c) =>
+            `https://wa.me/91${c.phone} — ${c.name}${c.school ? ` (${c.school})` : ""}${c.subject ? ` [${c.subject}]` : ""}`
+        )
+        .join("\n");
+      await copyTextWithFallback(links, "nominations-whatsapp-links.txt");
+      toast({
+        title: `Copied ${contacts.length.toLocaleString("en-IN")} WhatsApp Links!`,
+        description: "Direct outreach links with educator names copied to clipboard.",
+      });
+    } catch {
+      toast({ title: "Failed to copy WhatsApp links", variant: "destructive" });
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const copySummary = async () => {
+    if (rows.length === 0) {
+      toast({ title: "Nothing to copy", description: "No nominations match current filters.", variant: "destructive" });
+      return;
+    }
+    setCopying(true);
+    try {
+      const header = `📋 Nominations Summary (${rows.length.toLocaleString("en-IN")} records)\nExported: ${new Date().toLocaleString("en-IN")}\n------------------------------------------\n`;
+      const body = rows
+        .map((n, i) => {
+          const ph = n.phone || n.nominator_phone || "N/A";
+          const school = n.school_name ? ` · ${n.school_name}` : "";
+          const sub = n.subject ? ` · ${n.subject}` : "";
+          const cat = n.award_category ? ` · ${n.award_category}` : "";
+          const st = n.status ? ` [${n.status}]` : "";
+          return `${i + 1}. ${displayName(n)} (${ph}${school}${sub}${cat}${st})`;
+        })
+        .join("\n");
+      await copyTextWithFallback(header + body, "nominations-summary.txt");
+      toast({
+        title: `Copied Summary of ${rows.length.toLocaleString("en-IN")} Nominations!`,
+        description: "Formatted briefing list copied for WhatsApp, Slack, or Email.",
+      });
+    } catch {
+      toast({ title: "Failed to copy summary", variant: "destructive" });
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const exportCsv = () => {
+    if (rows.length === 0) {
+      toast({ title: "Nothing to export", description: "No nominations match current filters.", variant: "destructive" });
+      return;
+    }
+    try {
+      const blob = new Blob(["\uFEFF", nominationsToCsv(rows)], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `nominations-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast({
+        title: `Exported nominations.csv!`,
+        description: `Spreadsheet with ${rows.length.toLocaleString("en-IN")} rows downloaded with UTF-8 BOM.`,
+      });
+    } catch {
+      toast({ title: "Failed to export CSV", variant: "destructive" });
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="hero-outline"
+          size="sm"
+          disabled={copying || rows.length === 0}
+          className={`gap-1.5 text-xs h-9 font-medium shadow-sm transition-all ${className}`}
+        >
+          {copying ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-secondary" />
+          ) : (
+            <Copy className="w-3.5 h-3.5 text-secondary" />
+          )}
+          <span>{label || `Copy all (${rows.length.toLocaleString("en-IN")})`}</span>
+          <ChevronDown className="w-3.5 h-3.5 opacity-60 ml-0.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align={align}
+        className="w-72 bg-zinc-900 border border-white/15 rounded-xl p-1.5 shadow-2xl text-white text-xs backdrop-blur-xl z-[90]"
+      >
+        <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-white/40 px-2.5 py-1.5">
+          Copy Options ({rows.length.toLocaleString("en-IN")} Records)
+        </DropdownMenuLabel>
+
+        {/* 1. Excel / Sheets */}
+        <DropdownMenuItem
+          onClick={() => void copyTsv()}
+          className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 focus:bg-white/10 cursor-pointer text-white"
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold text-white">Copy for Excel / Sheets</div>
+            <div className="text-[10px] text-white/50">Tab-separated rows with all columns</div>
+          </div>
+        </DropdownMenuItem>
+
+        {/* 2. Phone numbers comma-separated */}
+        <DropdownMenuItem
+          onClick={() => void copyPhones("comma")}
+          className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 focus:bg-white/10 cursor-pointer text-white"
+        >
+          <Phone className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold text-white">Copy All Phone Numbers</div>
+            <div className="text-[10px] text-white/50">Comma-separated (for SMS/MSG91 broadcasts)</div>
+          </div>
+        </DropdownMenuItem>
+
+        {/* 3. Phone numbers 1 per line */}
+        <DropdownMenuItem
+          onClick={() => void copyPhones("lines")}
+          className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 focus:bg-white/10 cursor-pointer text-white"
+        >
+          <Phone className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold text-white">Copy Phones (1 per line)</div>
+            <div className="text-[10px] text-white/50">Line-by-line list for CRM & dialers</div>
+          </div>
+        </DropdownMenuItem>
+
+        {/* 4. WhatsApp links */}
+        <DropdownMenuItem
+          onClick={() => void copyWhatsApp()}
+          className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 focus:bg-white/10 cursor-pointer text-white"
+        >
+          <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold text-white">Copy Direct WhatsApp Links</div>
+            <div className="text-[10px] text-white/50">Clickable links (wa.me/91...) with names</div>
+          </div>
+        </DropdownMenuItem>
+
+        {/* 5. Formatted summary */}
+        <DropdownMenuItem
+          onClick={() => void copySummary()}
+          className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 focus:bg-white/10 cursor-pointer text-white"
+        >
+          <ListChecks className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold text-white">Copy Formatted Text Summary</div>
+            <div className="text-[10px] text-white/50">Numbered summary for Slack/Email/WA</div>
+          </div>
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator className="bg-white/10 my-1" />
+
+        {/* 6. Export CSV */}
+        <DropdownMenuItem
+          onClick={exportCsv}
+          className="flex items-start gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 focus:bg-white/10 cursor-pointer text-white"
+        >
+          <Download className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold text-white">Download CSV Spreadsheet</div>
+            <div className="text-[10px] text-white/50">Export nominations.csv with UTF-8 BOM</div>
+          </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
 const ViewNominationsModal = ({
   nominations, title, onClose, onPhotoClick,
 }: {
@@ -670,6 +961,28 @@ const ViewNominationsModal = ({
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 flex-shrink-0">
+            {/* Real View All toggle in modal */}
+            <Button
+              type="button"
+              variant="hero-outline"
+              size="sm"
+              className={`gap-1.5 text-xs h-9 font-medium transition-all ${
+                pageSize === "all"
+                  ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 shadow-sm"
+                  : ""
+              }`}
+              onClick={() => {
+                setDetail(null);
+                setPage(0);
+                setPageSize((cur) => (cur === "all" ? String(MODAL_PAGE_SIZE) : "all"));
+              }}
+              title={pageSize === "all" ? "Switch back to paginated view (50 per page)" : "Display all matching records continuously"}
+            >
+              <Eye className={`w-3.5 h-3.5 ${pageSize === "all" ? "text-emerald-400" : ""}`} />
+              <span>{pageSize === "all" ? `Showing All (${filtered.length})` : `View All (${filtered.length})`}</span>
+            </Button>
+
+            {/* Layout switch: Cards vs Table */}
             <Button
               type="button"
               variant="hero-outline"
@@ -680,20 +993,15 @@ const ViewNominationsModal = ({
                 setPage(0);
                 setLayout((cur) => (cur === "table" ? "cards" : "table"));
               }}
+              title={layout === "table" ? "Switch to card view" : "Switch to compact table view"}
             >
-              <Eye className="w-3.5 h-3.5" /> {layout === "table" ? "View all" : "Table"}
+              {layout === "table" ? <LayoutGrid className="w-3.5 h-3.5" /> : <TableIcon className="w-3.5 h-3.5" />}
+              <span>{layout === "table" ? "Cards View" : "Table View"}</span>
             </Button>
-            <Button
-              type="button"
-              variant="hero-outline"
-              size="sm"
-              className="gap-1.5 text-xs h-9"
-              disabled={copying || filtered.length === 0}
-              onClick={() => void copyAll()}
-            >
-              {copying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
-              {copying ? "Copying…" : `Copy all (${filtered.length.toLocaleString("en-IN")})`}
-            </Button>
+
+            {/* Copy All Dropdown Menu */}
+            <NominationCopyDropdown rows={filtered} />
+
             <button type="button" onClick={onClose} className="text-white/40 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5">
               <X className="w-5 h-5" />
             </button>
@@ -1377,6 +1685,8 @@ const AdminPage = () => {
           <TeacherImageManagementPanel mode="videos" />
         ) : activeTab === "after-session" ? (
           <AfterSessionNominationsPanel />
+        ) : activeTab === "fdp" ? (
+          <FdpRegistrationsPanel />
         ) : activeTab === "nominations" ? (
           <>
             <FunnelAnalytics
@@ -1537,13 +1847,55 @@ const AdminPage = () => {
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={openViewAll}>
-                        <Eye className="w-3.5 h-3.5" /> View all ({filtered.length.toLocaleString("en-IN")})
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* VIEW ALL TOGGLE IN TABLE */}
+                      <Button
+                        type="button"
+                        variant="hero-outline"
+                        size="sm"
+                        className={`gap-1.5 text-xs h-9 font-medium transition-all ${
+                          tablePageSize === "all"
+                            ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 shadow-sm"
+                            : ""
+                        }`}
+                        onClick={() => {
+                          if (filtered.length === 0) {
+                            toast({ title: "No nominations to view", description: "No records match current filters.", variant: "destructive" });
+                            return;
+                          }
+                          if (tablePageSize === "all") {
+                            setTablePageSize(String(MODAL_PAGE_SIZE));
+                            setTablePage(0);
+                          } else {
+                            setTablePageSize("all");
+                            setTablePage(0);
+                          }
+                        }}
+                        title={tablePageSize === "all" ? "Switch back to paginated view (50 per page)" : "Display all matching rows continuously in the table"}
+                      >
+                        <Eye className={`w-3.5 h-3.5 ${tablePageSize === "all" ? "text-emerald-400" : ""}`} />
+                        <span>
+                          {tablePageSize === "all"
+                            ? `Showing All (${filtered.length.toLocaleString("en-IN")})`
+                            : `View All (${filtered.length.toLocaleString("en-IN")})`}
+                        </span>
                       </Button>
-                      <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs h-9" onClick={() => void copyAllFiltered()}>
-                        <Copy className="w-3.5 h-3.5" /> Copy all ({filtered.length.toLocaleString("en-IN")})
+
+                      {/* EXPAND MODAL VIEW */}
+                      <Button
+                        type="button"
+                        variant="hero-outline"
+                        size="sm"
+                        className="gap-1.5 text-xs h-9 font-medium text-white/80 hover:text-white"
+                        onClick={openViewAll}
+                        title="Open expanded fullscreen dossier popup"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span>Dossier View</span>
                       </Button>
+
+                      {/* FULLY FUNCTIONED COPY ALL OPTIONS DROPDOWN */}
+                      <NominationCopyDropdown rows={filtered} />
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -1773,11 +2125,11 @@ const AdminPage = () => {
                   {nominations.length === 0 ? "No nominations yet. Share the site to get started!" : "No nominations match your filters."}
                 </div>
               )}
-              {filtered.length > MODAL_PAGE_SIZE && (
+              {filtered.length > 0 && (
                 <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-t border-primary-foreground/10 text-xs text-primary-foreground/50">
                   <div className="flex items-center gap-2">
-                    <span className="hidden sm:inline">Rows</span>
-                    <Select value={tablePageSize} onValueChange={setTablePageSize}>
+                    <span className="hidden sm:inline">Rows:</span>
+                    <Select value={tablePageSize} onValueChange={(val) => { setTablePageSize(val); setTablePage(0); }}>
                       <SelectTrigger className="h-8 w-[92px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs">
                         <SelectValue />
                       </SelectTrigger>
@@ -1789,25 +2141,44 @@ const AdminPage = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <span>{tableRangeStart}–{tableRangeEnd} of {filtered.length.toLocaleString("en-IN")}</span>
-                  <div className="flex items-center gap-4">
-                    <button
-                      type="button"
-                      disabled={safeTablePage === 0}
-                      onClick={() => setTablePage((p) => Math.max(0, p - 1))}
-                      className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      disabled={safeTablePage >= tablePageCount - 1}
-                      onClick={() => setTablePage((p) => Math.min(tablePageCount - 1, p + 1))}
-                      className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
-                    >
-                      Next
-                    </button>
-                  </div>
+
+                  {tablePageSize === "all" ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-emerald-400 font-medium">
+                        Showing all {filtered.length.toLocaleString("en-IN")} nominations continuously
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { setTablePageSize(String(MODAL_PAGE_SIZE)); setTablePage(0); }}
+                        className="text-secondary hover:underline text-[11px]"
+                      >
+                        Switch to 50 / page
+                      </button>
+                    </div>
+                  ) : (
+                    <span>{tableRangeStart}–{tableRangeEnd} of {filtered.length.toLocaleString("en-IN")}</span>
+                  )}
+
+                  {tablePageSize !== "all" && (
+                    <div className="flex items-center gap-4">
+                      <button
+                        type="button"
+                        disabled={safeTablePage === 0}
+                        onClick={() => setTablePage((p) => Math.max(0, p - 1))}
+                        className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        type="button"
+                        disabled={safeTablePage >= tablePageCount - 1}
+                        onClick={() => setTablePage((p) => Math.min(tablePageCount - 1, p + 1))}
+                        className="font-semibold text-secondary hover:text-secondary/80 disabled:text-primary-foreground/25 disabled:pointer-events-none"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>

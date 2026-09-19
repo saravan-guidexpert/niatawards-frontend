@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => ({
     hmr: { overlay: false },
     proxy: {
       "/api": {
-        target: "http://localhost:5000",
+        target: "http://localhost:5001",
         changeOrigin: true,
         timeout: 360000,
         proxyTimeout: 360000,

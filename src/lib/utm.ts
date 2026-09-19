@@ -17,7 +17,7 @@ const STORAGE_KEY = "niat_utm_params";
 const HIT_PREFIX = "niat_utm_hit:";
 const hitsInFlight = new Set<string>();
 
-const TRACKED_PATHS = new Set(["/", "/nominate-student", "/nominate-teacher"]);
+const TRACKED_PATHS = new Set(["/", "/nominate-student", "/nominate-teacher", "/fdp-registration"]);
 
 const trackedDestination = (pathname: string): string | undefined => {
   const path = pathname.replace(/\/+$/, "") || "/";

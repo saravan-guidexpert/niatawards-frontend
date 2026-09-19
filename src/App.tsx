@@ -45,6 +45,7 @@ const ThankYouPage    = lazyRoute(() => import("./pages/ThankYouPage.tsx"));
 const AdminPage       = lazyRoute(() => import("./pages/AdminPage.tsx"));
 const AdminLoginPage  = lazyRoute(() => import("./pages/AdminLoginPage.tsx"));
 const LoginPage       = lazyRoute(() => import("./pages/LoginPage.tsx"));
+const FdpRegistrationPage = lazyRoute(() => import("./pages/FdpRegistrationPage.tsx"));
 const NotFound        = lazyRoute(() => import("./pages/NotFound.tsx"));
 
 const PageLoader = () => (
@@ -89,6 +90,7 @@ const App = () => (
           <Route path="/nominate-student" element={<NominatePage role="student" />} />
           <Route path="/nominate-teacher" element={<NominatePage role="teacher" />} />
           <Route path="/thank-you"     element={<ThankYouPage />} />
+          <Route path="/fdp-registration" element={<FdpRegistrationPage />} />
           <Route path="/admin-login"   element={<AdminLoginPage />} />
           <Route path="/admin"         element={<AdminPage />} />
           <Route path="*"             element={<NotFound />} />

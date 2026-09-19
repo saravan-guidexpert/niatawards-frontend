@@ -1290,3 +1290,119 @@ export const adminUpdateAfterSessionStatus = (id: string, status: "NEW" | "VIEWE
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
+
+export interface FdpRegistrationItem {
+  _id: string;
+  registration_id: string;
+  full_name: string;
+  phone: string;
+  phone_verified: boolean;
+  teaching_subject?: string;
+  institution_name?: string;
+  city?: string;
+  experience_years?: string;
+  receive_updates: boolean;
+  status: "draft" | "submitted" | "cancelled";
+  admin_status: "NEW" | "CONTACTED" | "CONFIRMED" | "ARCHIVED";
+  admin_notes?: string;
+  utm?: {
+    source?: string;
+    medium?: string;
+    campaign?: string;
+    term?: string;
+    content?: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FdpListResponse {
+  items: FdpRegistrationItem[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface FdpStatsResponse {
+  total: number;
+  today: number;
+  optedInUpdates: number;
+  optedInPct: number;
+  statusCounts: {
+    NEW: number;
+    CONTACTED: number;
+    CONFIRMED: number;
+    ARCHIVED: number;
+  };
+  topSubjects: Array<{ subject: string; count: number }>;
+  topCities: Array<{ city: string; count: number }>;
+}
+
+export const adminGetFdpRegistrations = (opts: {
+  page?: number;
+  limit?: number | string;
+  search?: string;
+  status?: string;
+  experience?: string;
+  receive_updates?: string;
+  city?: string;
+  subject?: string;
+  lifecycle?: string;
+  date?: string;
+} = {}) => {
+  const params = new URLSearchParams();
+  if (opts.page) params.set("page", String(opts.page));
+  if (opts.limit) params.set("limit", String(opts.limit));
+  if (opts.search) params.set("search", opts.search);
+  if (opts.status && opts.status !== "all") params.set("status", opts.status);
+  if (opts.experience && opts.experience !== "all") params.set("experience", opts.experience);
+  if (opts.receive_updates && opts.receive_updates !== "all") params.set("receive_updates", opts.receive_updates);
+  if (opts.city && opts.city !== "all") params.set("city", opts.city);
+  if (opts.subject && opts.subject !== "all") params.set("subject", opts.subject);
+  if (opts.lifecycle) params.set("lifecycle", opts.lifecycle);
+  if (opts.date) params.set("date", opts.date);
+  const qs = params.toString();
+  return adminRequest<FdpListResponse>(`/api/admin/fdp${qs ? `?${qs}` : ""}`);
+};
+
+export const adminGetFdpStats = () =>
+  adminRequest<FdpStatsResponse>("/api/admin/fdp/stats");
+
+export const adminGetFdpRegistration = (id: string) =>
+  adminRequest<FdpRegistrationItem>(`/api/admin/fdp/${encodeURIComponent(id)}`);
+
+export const adminUpdateFdp = (id: string, payload: { admin_status?: string; admin_notes?: string }) =>
+  adminRequest<{ success: boolean; item: FdpRegistrationItem }>(`/api/admin/fdp/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+
+export const adminDeleteFdp = (id: string) =>
+  adminRequest<{ success: boolean; message: string }>(`/api/admin/fdp/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+
+export const adminDownloadFdpCsvUrl = (opts: {
+  search?: string;
+  status?: string;
+  experience?: string;
+  receive_updates?: string;
+  city?: string;
+  subject?: string;
+  lifecycle?: string;
+  date?: string;
+} = {}) => {
+  const params = new URLSearchParams();
+  if (opts.search) params.set("search", opts.search);
+  if (opts.status && opts.status !== "all") params.set("status", opts.status);
+  if (opts.experience && opts.experience !== "all") params.set("experience", opts.experience);
+  if (opts.receive_updates && opts.receive_updates !== "all") params.set("receive_updates", opts.receive_updates);
+  if (opts.city && opts.city !== "all") params.set("city", opts.city);
+  if (opts.subject && opts.subject !== "all") params.set("subject", opts.subject);
+  if (opts.lifecycle) params.set("lifecycle", opts.lifecycle);
+  if (opts.date) params.set("date", opts.date);
+  const qs = params.toString();
+  return `/api/admin/fdp/export${qs ? `?${qs}` : ""}`;
+};
+

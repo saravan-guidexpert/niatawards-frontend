@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Archive,
+  BookOpen,
   Clapperboard,
   GraduationCap,
   Images,
@@ -23,15 +24,16 @@ export type AdminTab =
   | "videos"
   | "teacher-video-messaging"
   | "offline"
-  | "after-session";
+  | "after-session"
+  | "fdp";
 
 export const isTabAllowed = (tab: AdminTab, allowed: Array<PanelPermission | "access">) => {
   if (tab === "teachers" || tab === "videos" || tab === "teacher-images" || tab === "video-production") {
     return allowed.includes("nominations");
   }
   if (tab === "teacher-video-messaging") return allowed.includes("whatsapp");
-  if (tab === "after-session") {
-    return allowed.includes("nominations") || allowed.includes("campaigns") || allowed.includes("digital");
+  if (tab === "after-session" || tab === "fdp") {
+    return allowed.includes("nominations") || allowed.includes("campaigns") || allowed.includes("digital") || allowed.includes("whatsapp");
   }
   if (tab === "offline") return allowed.includes("nominations") || allowed.includes("campaigns");
   return allowed.includes(tab);
@@ -89,6 +91,12 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         label: "After Session Nominations",
         hint: "Future submissions — display only",
         icon: Archive,
+      },
+      {
+        id: "fdp",
+        label: "FDP Registrations",
+        hint: "Faculty Development Program attendees",
+        icon: BookOpen,
       },
     ],
   },
