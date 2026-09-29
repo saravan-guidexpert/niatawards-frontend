@@ -3,6 +3,7 @@ import {
   Archive,
   BookOpen,
   Clapperboard,
+  Gift,
   GraduationCap,
   Images,
   MapPin,
@@ -25,10 +26,11 @@ export type AdminTab =
   | "teacher-video-messaging"
   | "offline"
   | "after-session"
-  | "fdp";
+  | "fdp"
+  | "momentos";
 
 export const isTabAllowed = (tab: AdminTab, allowed: Array<PanelPermission | "access">) => {
-  if (tab === "teachers" || tab === "videos" || tab === "teacher-images" || tab === "video-production") {
+  if (tab === "teachers" || tab === "videos" || tab === "teacher-images" || tab === "video-production" || tab === "momentos") {
     return allowed.includes("nominations");
   }
   if (tab === "teacher-video-messaging") return allowed.includes("whatsapp");
@@ -62,6 +64,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
       { id: "teacher-images", label: "Teacher Photo Management", hint: "Finalized teacher portraits", icon: Images },
       { id: "video-production", label: "Video Production", hint: "Queue nomination videos", icon: Clapperboard },
       { id: "videos", label: "Teacher Video Review", hint: "Approve generated videos", icon: Clapperboard },
+      { id: "momentos", label: "Momentos", hint: "Category icons used in teacher videos", icon: Gift },
     ],
   },
   {

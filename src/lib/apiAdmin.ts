@@ -1383,6 +1383,34 @@ export const adminDeleteFdp = (id: string) =>
     method: "DELETE",
   });
 
+export type MomentoVideo = {
+  nomination_id: string;
+  video_url: string | null;
+  category_icon_label: string | null;
+  generated_at: string | null;
+};
+
+export type MomentoItem = {
+  id: string;
+  name: string;
+  phone: string;
+  region: string;
+  matched: boolean;
+  video_count: number;
+  momentos: string[];
+  videos: MomentoVideo[];
+};
+
+export type MomentosResponse = {
+  items: MomentoItem[];
+  total: number;
+  matched: number;
+  with_momento: number;
+  not_generated: number;
+};
+
+export const adminGetMomentos = () => adminRequest<MomentosResponse>("/api/admin/momentos");
+
 export const adminDownloadFdpCsvUrl = (opts: {
   search?: string;
   status?: string;

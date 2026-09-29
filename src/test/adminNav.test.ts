@@ -9,6 +9,7 @@ describe("admin nav", () => {
     expect(ids).toContain("teacher-images");
     expect(ids).toContain("video-production");
     expect(ids).toContain("after-session");
+    expect(ids).toContain("momentos");
     expect(ADMIN_NAV_GROUPS).toHaveLength(4);
   });
 
@@ -18,12 +19,14 @@ describe("admin nav", () => {
     expect(isTabAllowed("video-production", ["nominations"])).toBe(true);
     expect(isTabAllowed("offline", ["nominations"])).toBe(true);
     expect(isTabAllowed("after-session", ["nominations"])).toBe(true);
+    expect(isTabAllowed("momentos", ["nominations"])).toBe(true);
     expect(isTabAllowed("whatsapp", ["nominations"])).toBe(false);
   });
 
   it("lets campaign staff open offline team without nominations access", () => {
     expect(isTabAllowed("offline", ["campaigns"])).toBe(true);
     expect(isTabAllowed("teachers", ["campaigns"])).toBe(false);
+    expect(isTabAllowed("momentos", ["campaigns"])).toBe(false);
   });
 
   it("labels the current page for the top bar", () => {
@@ -32,5 +35,6 @@ describe("admin nav", () => {
     expect(adminTabLabel("teacher-images")).toBe("Teacher Photo Management");
     expect(adminTabLabel("video-production")).toBe("Video Production");
     expect(adminTabLabel("after-session")).toBe("After Session Nominations");
+    expect(adminTabLabel("momentos")).toBe("Momentos");
   });
 });
