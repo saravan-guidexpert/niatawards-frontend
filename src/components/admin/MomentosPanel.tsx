@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  ChevronDown,
   Clapperboard,
   Copy,
   Download,
+  FileSpreadsheet,
   Gift,
+  ListChecks,
   Loader2,
   MapPin,
+  MessageCircle,
+  Phone,
   RefreshCw,
   Search,
   UserCheck,
@@ -13,6 +18,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { copyTextWithFallback } from "@/lib/copyText";
 import { adminGetMomentos, type MomentoItem } from "@/lib/apiAdmin";
@@ -47,8 +60,36 @@ const STATE_ACTIVE: Record<MomentoState, string> = {
 
 const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
+const flattenCell = (value: unknown) => String(value ?? "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
+
 const titleCase = (value: string) =>
   value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const COPY_HEADERS = ["State", "#", "Teacher", "Phone", "Status", "Videos", "Momento"];
+
+const itemStatus = (item: MomentoItem) =>
+  !item.matched ? "Unmatched" : item.momentos.length > 0 ? "Ready" : item.video_count > 0 ? "No icon" : "Pending";
+
+const itemMomento = (item: MomentoItem) =>
+  item.momentos[0] ? titleCase(item.momentos[0]) : item.video_count > 0 ? "Not recorded" : "Not generated";
+
+const momentoRowCells = (state: string, item: MomentoItem, index: number) => [
+  state,
+  String(index + 1),
+  item.name,
+  item.phone || "",
+  itemStatus(item),
+  String(item.video_count),
+  itemMomento(item),
+];
+
+const validPhones = (rows: MomentoItem[]) => [
+  ...new Set(
+    rows
+      .map((item) => String(item.phone || "").replace(/\D/g, "").slice(-10))
+      .filter((phone) => /^\d{10}$/.test(phone))
+  ),
+];
 
 const MomentoChips = ({ item }: { item: MomentoItem }) => {
   const label = item.momentos[0];
@@ -98,10 +139,12 @@ const StateTable = ({
   region,
   rows,
   onCopyPhone,
+  onCopyAll,
 }: {
   region: MomentoState;
   rows: MomentoItem[];
   onCopyPhone: (phone: string) => void;
+  onCopyAll?: () => void;
 }) => (
   <div className={`rounded-xl border ${STATE_ACCENT[region]} bg-primary-foreground/[0.03] overflow-hidden`}>
     <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-primary-foreground/10">
@@ -113,9 +156,23 @@ const StateTable = ({
           {rows.length} teacher{rows.length !== 1 ? "s" : ""}
         </p>
       </div>
-      <p className="text-[11px] text-primary-foreground/40 shrink-0">
-        {rows.filter((row) => row.momentos.length > 0).length} with momento
-      </p>
+      <div className="flex items-center gap-2 shrink-0">
+        <p className="text-[11px] text-primary-foreground/40">
+          {rows.filter((row) => row.momentos.length > 0).length} with momento
+        </p>
+        {onCopyAll && rows.length > 0 && (
+          <Button
+            type="button"
+            variant="hero-outline"
+            size="sm"
+            className="h-7 px-2 gap-1 text-[10px]"
+            onClick={() => void onCopyAll()}
+          >
+            <Copy className="w-3 h-3" />
+            Copy all
+          </Button>
+        )}
+      </div>
     </div>
 
     <div className="lg:hidden p-3 space-y-3">
@@ -225,6 +282,7 @@ const MomentosPanel = () => {
   const [search, setSearch] = useState("");
   const [region, setRegion] = useState<RegionFilter>("All");
   const [loading, setLoading] = useState(true);
+  const [copying, setCopying] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -295,47 +353,130 @@ const MomentosPanel = () => {
     };
   });
 
-  const exportCSV = () => {
+  const tableRowsFor = (states: MomentoState[]) => {
+    const rows: string[][] = [];
+    for (const state of states) {
+      grouped[state].forEach((item, index) => {
+        rows.push(momentoRowCells(state, item, index));
+      });
+    }
+    return rows;
+  };
+
+  const notifyCopy = (result: "copied" | "downloaded", title: string, description: string) => {
+    if (result === "copied") {
+      toast({ title, description });
+      return;
+    }
+    toast({
+      title: title.replace(/^Copied/, "Downloaded"),
+      description: "Clipboard was too large or blocked, so a file was saved instead.",
+    });
+  };
+
+  const copyTsv = async (states: MomentoState[] = visibleStates, filename = "momentos.tsv") => {
+    const rows = tableRowsFor(states);
+    if (rows.length === 0) {
+      toast({ title: "Nothing to copy", description: "No teachers match the current view.", variant: "destructive" });
+      return;
+    }
+    setCopying(true);
+    try {
+      const tsv = [COPY_HEADERS, ...rows].map((row) => row.map(flattenCell).join("\t")).join("\n");
+      const result = await copyTextWithFallback(tsv, filename);
+      notifyCopy(
+        result,
+        `Copied all ${rows.length} teacher${rows.length !== 1 ? "s" : ""}`,
+        "Tab-separated rows ready to paste into Excel or Google Sheets."
+      );
+    } catch {
+      toast({ title: "Copy failed", description: "Could not copy or download the list.", variant: "destructive" });
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const copyPhones = async (commaSeparated: boolean) => {
+    const phones = validPhones(visible);
+    if (phones.length === 0) {
+      toast({ title: "No phone numbers to copy", description: "No valid 10-digit phones in this view.", variant: "destructive" });
+      return;
+    }
+    setCopying(true);
+    try {
+      const text = commaSeparated ? phones.join(", ") : phones.join("\n");
+      const result = await copyTextWithFallback(text, "momentos-phones.txt");
+      notifyCopy(
+        result,
+        `Copied ${phones.length} phone${phones.length !== 1 ? "s" : ""}`,
+        commaSeparated ? "Comma-separated list ready for bulk SMS." : "One number per line, ready for dialers."
+      );
+    } catch {
+      toast({ title: "Copy failed", variant: "destructive" });
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const copyWhatsAppLinks = async () => {
+    const rows = visible.filter((item) => /^\d{10}$/.test(String(item.phone || "").replace(/\D/g, "").slice(-10)));
+    if (rows.length === 0) {
+      toast({ title: "No WhatsApp links to copy", variant: "destructive" });
+      return;
+    }
+    setCopying(true);
+    try {
+      const links = rows
+        .map((item) => {
+          const phone = String(item.phone || "").replace(/\D/g, "").slice(-10);
+          return `https://wa.me/91${phone} (${item.name})`;
+        })
+        .join("\n");
+      const result = await copyTextWithFallback(links, "momentos-whatsapp-links.txt");
+      notifyCopy(result, `Copied ${rows.length} WhatsApp link${rows.length !== 1 ? "s" : ""}`, "Direct chat links for outreach.");
+    } catch {
+      toast({ title: "Copy failed", variant: "destructive" });
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const copySummary = async () => {
     if (visible.length === 0) {
+      toast({ title: "No records to copy", variant: "destructive" });
+      return;
+    }
+    setCopying(true);
+    try {
+      const lines: string[] = [];
+      for (const state of visibleStates) {
+        grouped[state].forEach((item, index) => {
+          const phone = item.phone ? `+91 ${item.phone}` : "No phone";
+          lines.push(`${index + 1}. ${item.name} (${phone}) — ${state} — ${itemMomento(item)} — ${itemStatus(item)}`);
+        });
+      }
+      const result = await copyTextWithFallback(lines.join("\n"), "momentos-summary.txt");
+      notifyCopy(result, `Copied ${visible.length} teacher summar${visible.length !== 1 ? "ies" : "y"}`, "Numbered list ready for Slack or WhatsApp.");
+    } catch {
+      toast({ title: "Copy failed", variant: "destructive" });
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const exportCSV = () => {
+    const rows = tableRowsFor(visibleStates);
+    if (rows.length === 0) {
       toast({ title: "Nothing to export", description: "No teachers match the current view.", variant: "destructive" });
       return;
     }
-    const headers = ["State", "#", "Teacher", "Phone", "Status", "Videos", "Momento"];
-    const rows: string[][] = [];
-    for (const state of visibleStates) {
-      grouped[state].forEach((item, index) => {
-        rows.push([
-          state,
-          String(index + 1),
-          item.name,
-          item.phone || "",
-          !item.matched ? "Unmatched" : item.momentos.length > 0 ? "Ready" : item.video_count > 0 ? "No icon" : "Pending",
-          String(item.video_count),
-          item.momentos[0] ? titleCase(item.momentos[0]) : item.video_count > 0 ? "Not recorded" : "Not generated",
-        ]);
-      });
-    }
-    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    const csv = [COPY_HEADERS, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const a = document.createElement("a");
     a.href = url;
     a.download = region === "All" ? "momentos-all-states.csv" : `momentos-${region.toLowerCase().replace(/\s+/g, "-")}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const copyPhones = async () => {
-    const phones = [...new Set(visible.map((item) => item.phone).filter(Boolean))];
-    if (phones.length === 0) {
-      toast({ title: "Nothing to copy", description: "No valid phones in this view.", variant: "destructive" });
-      return;
-    }
-    try {
-      await copyTextWithFallback(phones.join("\n"), "momentos-phones.txt");
-      toast({ title: `Copied ${phones.length} phone${phones.length !== 1 ? "s" : ""}` });
-    } catch {
-      toast({ title: "Copy failed", variant: "destructive" });
-    }
   };
 
   const copyPhone = async (phone: string) => {
@@ -373,10 +514,80 @@ const MomentosPanel = () => {
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             Refresh
           </Button>
-          <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={() => void copyPhones()}>
-            <Copy className="w-3.5 h-3.5" />
-            Copy phones
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="hero-outline"
+                size="sm"
+                disabled={copying || visible.length === 0}
+                className="gap-1.5 text-xs"
+              >
+                {copying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+                Copy All
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-64 bg-zinc-900 border border-white/15 rounded-2xl p-1.5 shadow-2xl text-white text-xs backdrop-blur-xl"
+            >
+              <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-white/40 px-2.5 py-1.5">
+                Copy {visible.length} teacher{visible.length !== 1 ? "s" : ""}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => void copyTsv()}
+                className="flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/10 focus:bg-white/10 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-white">Copy for Excel / Sheets</div>
+                  <div className="text-[10px] text-white/45">Tab-separated rows with all columns</div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => void copyPhones(true)}
+                className="flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/10 focus:bg-white/10 cursor-pointer"
+              >
+                <Phone className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-white">Copy All Phone Numbers</div>
+                  <div className="text-[10px] text-white/45">Comma-separated (for SMS broadcasts)</div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => void copyPhones(false)}
+                className="flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/10 focus:bg-white/10 cursor-pointer"
+              >
+                <Phone className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-white">Copy Phones (1 per line)</div>
+                  <div className="text-[10px] text-white/45">Line-by-line list for CRM dialers</div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => void copyWhatsAppLinks()}
+                className="flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/10 focus:bg-white/10 cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-white">Copy Direct WhatsApp Links</div>
+                  <div className="text-[10px] text-white/45">Clickable chat links for quick outreach</div>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/10 my-1" />
+              <DropdownMenuItem
+                onClick={() => void copySummary()}
+                className="flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/10 focus:bg-white/10 cursor-pointer"
+              >
+                <ListChecks className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-white">Copy Formatted Text Summary</div>
+                  <div className="text-[10px] text-white/45">Numbered teacher list for Slack/Email</div>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="hero-outline" size="sm" className="gap-1.5 text-xs" onClick={exportCSV}>
             <Download className="w-3.5 h-3.5" />
             Export CSV
@@ -461,7 +672,18 @@ const MomentosPanel = () => {
           {visibleStates.map((state) => {
             if (region === "All" && grouped[state].length === 0) return null;
             return (
-              <StateTable key={state} region={state} rows={grouped[state]} onCopyPhone={(phone) => void copyPhone(phone)} />
+              <StateTable
+                key={state}
+                region={state}
+                rows={grouped[state]}
+                onCopyPhone={(phone) => void copyPhone(phone)}
+                onCopyAll={() =>
+                  void copyTsv(
+                    [state],
+                    `momentos-${state.toLowerCase().replace(/\s+/g, "-")}.tsv`
+                  )
+                }
+              />
             );
           })}
           {visible.length === 0 && (
