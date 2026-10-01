@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,8 +68,36 @@ const titleCase = (value: string) =>
 
 const COPY_HEADERS = ["State", "#", "Teacher", "Phone", "Status", "Videos", "Momento"];
 
+const MOMENTO_NAMES = [
+  "motivation icon",
+  "support champion",
+  "role model icon",
+  "guiding star",
+  "discipline champion",
+  "caring hero",
+  "classroom rockstar",
+  "creative spark",
+  "knowledge icon",
+  "confidence builder",
+  "patience champion",
+  "inspiration icon",
+] as const;
+
+type MomentoFilter = "All" | "not-recorded" | "not-generated" | (typeof MOMENTO_NAMES)[number];
+type StatusFilter = "All" | "Ready" | "Pending" | "No icon" | "Unmatched";
+
 const itemStatus = (item: MomentoItem) =>
   !item.matched ? "Unmatched" : item.momentos.length > 0 ? "Ready" : item.video_count > 0 ? "No icon" : "Pending";
+
+const matchesMomentoFilter = (item: MomentoItem, filter: MomentoFilter) => {
+  if (filter === "All") return true;
+  if (filter === "not-generated") return item.video_count === 0;
+  if (filter === "not-recorded") return item.video_count > 0 && item.momentos.length === 0;
+  return item.momentos.some((label) => label.toLowerCase() === filter);
+};
+
+const matchesStatusFilter = (item: MomentoItem, filter: StatusFilter) =>
+  filter === "All" || itemStatus(item) === filter;
 
 const itemMomento = (item: MomentoItem) =>
   item.momentos[0] ? titleCase(item.momentos[0]) : item.video_count > 0 ? "Not recorded" : "Not generated";
@@ -281,6 +310,8 @@ const MomentosPanel = () => {
   const [items, setItems] = useState<MomentoItem[]>([]);
   const [search, setSearch] = useState("");
   const [region, setRegion] = useState<RegionFilter>("All");
+  const [momentoFilter, setMomentoFilter] = useState<MomentoFilter>("All");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [loading, setLoading] = useState(true);
   const [copying, setCopying] = useState(false);
 
@@ -306,13 +337,15 @@ const MomentosPanel = () => {
 
   const searched = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) =>
-      [item.name, item.phone, item.region, ...item.momentos].some((value) =>
-        String(value || "").toLowerCase().includes(q)
-      )
-    );
-  }, [items, search]);
+    return items.filter((item) => {
+      const matchSearch =
+        !q ||
+        [item.name, item.phone, item.region, ...item.momentos].some((value) =>
+          String(value || "").toLowerCase().includes(q)
+        );
+      return matchSearch && matchesMomentoFilter(item, momentoFilter) && matchesStatusFilter(item, statusFilter);
+    });
+  }, [items, search, momentoFilter, statusFilter]);
 
   const grouped = useMemo(() => {
     const byState = Object.fromEntries(STATES.map((state) => [state, [] as MomentoItem[]])) as Record<
@@ -652,14 +685,45 @@ const MomentosPanel = () => {
         })}
       </div>
 
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary-foreground/30" />
-        <Input
-          placeholder="Search teacher, phone, or momento across the selected states..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="pl-9 w-full bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-10"
-        />
+      <div className="flex flex-col gap-2">
+        <div className="relative">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary-foreground/30" />
+          <Input
+            placeholder="Search teacher, phone, or momento across the selected states..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="pl-9 w-full bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/30 text-sm h-10"
+          />
+        </div>
+        <div className="grid grid-cols-2 lg:flex lg:flex-wrap gap-2">
+          <Select value={momentoFilter} onValueChange={(value) => setMomentoFilter(value as MomentoFilter)}>
+            <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[220px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9">
+              <SelectValue placeholder="All momentos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All momentos</SelectItem>
+              {MOMENTO_NAMES.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {titleCase(name)}
+                </SelectItem>
+              ))}
+              <SelectItem value="not-recorded">Not recorded</SelectItem>
+              <SelectItem value="not-generated">Not generated</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
+            <SelectTrigger className="w-full min-w-0 lg:w-auto lg:min-w-[170px] bg-primary-foreground/5 border-primary-foreground/10 text-primary-foreground text-xs h-9">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All statuses</SelectItem>
+              <SelectItem value="Ready">Ready</SelectItem>
+              <SelectItem value="Pending">Pending</SelectItem>
+              <SelectItem value="No icon">No icon</SelectItem>
+              <SelectItem value="Unmatched">Unmatched</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {loading && items.length === 0 ? (
@@ -688,7 +752,7 @@ const MomentosPanel = () => {
           })}
           {visible.length === 0 && (
             <div className="py-16 text-center text-primary-foreground/40 rounded-xl border border-primary-foreground/10">
-              {items.length === 0 ? "No momento teachers configured." : "No teachers match your search."}
+              {items.length === 0 ? "No momento teachers configured." : "No teachers match your search or filters."}
             </div>
           )}
         </div>
