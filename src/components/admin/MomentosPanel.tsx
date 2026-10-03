@@ -31,12 +31,13 @@ import { useToast } from "@/hooks/use-toast";
 import { copyTextWithFallback } from "@/lib/copyText";
 import { adminGetMomentos, type MomentoItem } from "@/lib/apiAdmin";
 
-const STATES = ["Karnataka", "Telangana", "Andhra Pradesh", "Tamil Nadu", "Uttar Pradesh"] as const;
+const STATES = ["Karnataka 1", "Karnataka 2", "Telangana", "Andhra Pradesh", "Tamil Nadu", "Uttar Pradesh"] as const;
 type MomentoState = (typeof STATES)[number];
 type RegionFilter = "All" | MomentoState;
 
 const STATE_CHIP: Record<MomentoState, string> = {
-  Karnataka: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+  "Karnataka 1": "bg-orange-500/15 text-orange-300 border-orange-500/25",
+  "Karnataka 2": "bg-amber-500/15 text-amber-300 border-amber-500/25",
   Telangana: "bg-sky-500/15 text-sky-300 border-sky-500/25",
   "Andhra Pradesh": "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
   "Tamil Nadu": "bg-pink-500/15 text-pink-300 border-pink-500/25",
@@ -44,7 +45,8 @@ const STATE_CHIP: Record<MomentoState, string> = {
 };
 
 const STATE_ACCENT: Record<MomentoState, string> = {
-  Karnataka: "border-amber-500/30",
+  "Karnataka 1": "border-orange-500/30",
+  "Karnataka 2": "border-amber-500/30",
   Telangana: "border-sky-500/30",
   "Andhra Pradesh": "border-emerald-500/30",
   "Tamil Nadu": "border-pink-500/30",
@@ -52,7 +54,8 @@ const STATE_ACCENT: Record<MomentoState, string> = {
 };
 
 const STATE_ACTIVE: Record<MomentoState, string> = {
-  Karnataka: "border-amber-500/40 bg-amber-500/10",
+  "Karnataka 1": "border-orange-500/40 bg-orange-500/10",
+  "Karnataka 2": "border-amber-500/40 bg-amber-500/10",
   Telangana: "border-sky-500/40 bg-sky-500/10",
   "Andhra Pradesh": "border-emerald-500/40 bg-emerald-500/10",
   "Tamil Nadu": "border-pink-500/40 bg-pink-500/10",
@@ -643,7 +646,7 @@ const MomentosPanel = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-3">
         <button
           type="button"
           onClick={() => setRegion("All")}
