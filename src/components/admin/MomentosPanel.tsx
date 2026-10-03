@@ -31,7 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { copyTextWithFallback } from "@/lib/copyText";
 import { adminGetMomentos, type MomentoItem } from "@/lib/apiAdmin";
 
-const STATES = ["Karnataka 1", "Karnataka 2", "Telangana", "Andhra Pradesh", "Tamil Nadu", "Uttar Pradesh"] as const;
+const STATES = ["Karnataka 1", "Karnataka 2", "Telangana", "Andhra Pradesh", "Tamil Nadu", "Uttar Pradesh", "Rajasthan", "Odisha"] as const;
 type MomentoState = (typeof STATES)[number];
 type RegionFilter = "All" | MomentoState;
 
@@ -42,6 +42,8 @@ const STATE_CHIP: Record<MomentoState, string> = {
   "Andhra Pradesh": "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
   "Tamil Nadu": "bg-pink-500/15 text-pink-300 border-pink-500/25",
   "Uttar Pradesh": "bg-indigo-500/15 text-indigo-300 border-indigo-500/25",
+  Rajasthan: "bg-rose-500/15 text-rose-300 border-rose-500/25",
+  Odisha: "bg-teal-500/15 text-teal-300 border-teal-500/25",
 };
 
 const STATE_ACCENT: Record<MomentoState, string> = {
@@ -51,6 +53,8 @@ const STATE_ACCENT: Record<MomentoState, string> = {
   "Andhra Pradesh": "border-emerald-500/30",
   "Tamil Nadu": "border-pink-500/30",
   "Uttar Pradesh": "border-indigo-500/30",
+  Rajasthan: "border-rose-500/30",
+  Odisha: "border-teal-500/30",
 };
 
 const STATE_ACTIVE: Record<MomentoState, string> = {
@@ -60,6 +64,8 @@ const STATE_ACTIVE: Record<MomentoState, string> = {
   "Andhra Pradesh": "border-emerald-500/40 bg-emerald-500/10",
   "Tamil Nadu": "border-pink-500/40 bg-pink-500/10",
   "Uttar Pradesh": "border-indigo-500/40 bg-indigo-500/10",
+  Rajasthan: "border-rose-500/40 bg-rose-500/10",
+  Odisha: "border-teal-500/40 bg-teal-500/10",
 };
 
 const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
@@ -646,7 +652,7 @@ const MomentosPanel = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-5 gap-3">
         <button
           type="button"
           onClick={() => setRegion("All")}
