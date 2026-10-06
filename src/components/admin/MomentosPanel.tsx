@@ -31,7 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { copyTextWithFallback } from "@/lib/copyText";
 import { adminGetMomentos, type MomentoItem } from "@/lib/apiAdmin";
 
-const STATES = ["Karnataka 1", "Karnataka 2", "Telangana", "Andhra Pradesh", "Tamil Nadu", "Uttar Pradesh", "Rajasthan", "Odisha"] as const;
+const STATES = ["Karnataka 1", "Karnataka 2", "Telangana", "Andhra Pradesh", "Tamil Nadu", "Uttar Pradesh", "Rajasthan", "Odisha", "Maharashtra"] as const;
 type MomentoState = (typeof STATES)[number];
 type RegionFilter = "All" | MomentoState;
 
@@ -44,6 +44,7 @@ const STATE_CHIP: Record<MomentoState, string> = {
   "Uttar Pradesh": "bg-indigo-500/15 text-indigo-300 border-indigo-500/25",
   Rajasthan: "bg-rose-500/15 text-rose-300 border-rose-500/25",
   Odisha: "bg-teal-500/15 text-teal-300 border-teal-500/25",
+  Maharashtra: "bg-violet-500/15 text-violet-300 border-violet-500/25",
 };
 
 const STATE_ACCENT: Record<MomentoState, string> = {
@@ -55,6 +56,7 @@ const STATE_ACCENT: Record<MomentoState, string> = {
   "Uttar Pradesh": "border-indigo-500/30",
   Rajasthan: "border-rose-500/30",
   Odisha: "border-teal-500/30",
+  Maharashtra: "border-violet-500/30",
 };
 
 const STATE_ACTIVE: Record<MomentoState, string> = {
@@ -66,6 +68,7 @@ const STATE_ACTIVE: Record<MomentoState, string> = {
   "Uttar Pradesh": "border-indigo-500/40 bg-indigo-500/10",
   Rajasthan: "border-rose-500/40 bg-rose-500/10",
   Odisha: "border-teal-500/40 bg-teal-500/10",
+  Maharashtra: "border-violet-500/40 bg-violet-500/10",
 };
 
 const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
@@ -652,7 +655,7 @@ const MomentosPanel = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
         <button
           type="button"
           onClick={() => setRegion("All")}
